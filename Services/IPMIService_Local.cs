@@ -39,7 +39,8 @@ public class IPMIService_Local : IIPMIService
 
         try
         {
-            var command = BuildCommand("sensor reading");
+            // Use 'sensor' not 'sensor reading' - sensor reading expects a specific sensor ID
+            var command = BuildCommand("sensor");
             var output = await ExecuteCommandAsync(command);
 
             // Parse temperature readings
@@ -48,10 +49,12 @@ public class IPMIService_Local : IIPMIService
 
             foreach (var line in lines)
             {
-                // Dell R720 typical CPU temperature sensors:
-                // "CPU1 Temp" | na      | 38.000    | degrees C
-                // "CPU2 Temp" | na      | 40.000    | degrees C
-                if (line.Contains("Temp") && line.Contains("degrees C"))
+                // Dell R720 sensor output format:
+                // Fan1             | 16320.000  | RPM        | ok
+                // Inlet Temp       | 32.000     | degrees C  | ok
+                // Exhaust Temp     | 35.000     | degrees C  | ok
+                // Temp             | 42.000     | degrees C  | ok
+                if (line.Contains("degrees C"))
                 {
                     var parts = line.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                     if (parts.Length >= 2)
@@ -62,6 +65,7 @@ public class IPMIService_Local : IIPMIService
                         if (double.TryParse(tempValue, out var temp))
                         {
                             temperatures.Add((int)Math.Round(temp));
+                            _logger.LogDebug("Temperature sensor '{Name}': {Temp}°C", sensorName, temp);
                         }
                     }
                 }
@@ -93,15 +97,17 @@ public class IPMIService_Local : IIPMIService
 
         try
         {
-            var command = BuildCommand("sensor reading");
+            // Use 'sensor' not 'sensor reading'
+            var command = BuildCommand("sensor");
             var output = await ExecuteCommandAsync(command);
 
             var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             foreach (var line in lines)
             {
-                // Look for fan sensors
-                if (line.Contains("Fan") && line.Contains("RPM"))
+                // Look for fan sensors - Dell R720 format:
+                // Fan1             | 16320.000  | RPM        | ok
+                if (line.Contains("RPM") && (line.StartsWith("Fan") || line.Contains("Fan")))
                 {
                     var parts = line.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                     if (parts.Length >= 2)
@@ -109,14 +115,16 @@ public class IPMIService_Local : IIPMIService
                         var fanName = parts[0].Trim();
                         var rpmValue = parts[1].Trim();
 
-                        if (int.TryParse(rpmValue, out var rpm))
+                        // RPM values are decimals like "16320.000"
+                        if (double.TryParse(rpmValue, out var rpm))
                         {
                             fans.Add(new FanInfo
                             {
                                 Name = fanName,
-                                RPM = rpm,
+                                RPM = (int)rpm,
                                 Timestamp = DateTime.Now
                             });
+                            _logger.LogDebug("Fan '{Name}': {RPM} RPM", fanName, rpm);
                         }
                     }
                 }
@@ -144,13 +152,26 @@ public class IPMIService_Local : IIPMIService
     {
         try
         {
-            // Convert percentage to hex value (0-255 range)
-            int hexValue = (int)((percentage / 100.0) * 255);
-            
-            var command = BuildCommand($"raw 0x30 0x45 0x01 {hexValue:x2}");
-            await ExecuteCommandAsync(command);
+            if (percentage < 0 || percentage > 100)
+            {
+                _logger.LogWarning("Invalid fan speed percentage: {Percentage}%", percentage);
+                return false;
+            }
 
-            _logger.LogInformation("Fan speed set to {Percentage}%", percentage);
+            // First, enable manual fan control for Dell R720 XD
+            var enableManual = BuildCommand("raw 0x30 0x30 0x01 0x00");
+            await ExecuteCommandAsync(enableManual);
+
+            // Convert percentage to hex (Dell uses 0-64 hex range for RPM percentage)
+            // 20% = 0x14, 25% = 0x19, 30% = 0x1E, 50% = 0x32, 60% = 0x3C, 100% = 0x64
+            int hexValue = percentage;
+            var hexString = hexValue.ToString("X2");
+
+            // Set fan speed: raw 0x30 0x30 0x02 0xff 0x<hex_percentage>
+            var setSpeed = BuildCommand($"raw 0x30 0x30 0x02 0xff 0x{hexString}");
+            await ExecuteCommandAsync(setSpeed);
+
+            _logger.LogInformation("Fan speed set to {Percentage}% (0x{Hex})", percentage, hexString);
             return true;
         }
         catch (Exception ex)
@@ -167,7 +188,8 @@ public class IPMIService_Local : IIPMIService
     {
         try
         {
-            var command = BuildCommand("raw 0x30 0x45 0x01 0x01");
+            // Restore automatic/dynamic fan control for Dell R720 XD
+            var command = BuildCommand("raw 0x30 0x30 0x01 0x01");
             await ExecuteCommandAsync(command);
 
             _logger.LogInformation("Dynamic fan control restored");
