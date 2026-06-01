@@ -3,7 +3,7 @@ using System.Diagnostics;
 
 namespace DellFanControl.Services;
 
-public class IPMIService : IDisposable
+public class IPMIService : IIPMIService
 {
     private readonly ILogger<IPMIService> _logger;
     private readonly IConfiguration _configuration;
@@ -21,7 +21,7 @@ public class IPMIService : IDisposable
     /// <summary>
     /// Gets current temperature readings from iDRAC
     /// </summary>
-    public async Task<TemperatureStatus> GetTemperaturesAsync(CancellationToken cancellationToken = default)
+    internal async Task<TemperatureStatus> GetTemperaturesStatusAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -56,7 +56,7 @@ public class IPMIService : IDisposable
     /// <summary>
     /// Sets fan speed to a specific percentage
     /// </summary>
-    public async Task SetFanSpeedAsync(int percentage, CancellationToken cancellationToken = default)
+    internal async Task<bool> SetFanSpeedInternalAsync(int percentage, CancellationToken cancellationToken = default)
     {
         if (percentage < 0 || percentage > 100)
         {
@@ -87,7 +87,7 @@ public class IPMIService : IDisposable
     /// <summary>
     /// Restores dynamic fan control (automatic fan control by iDRAC)
     /// </summary>
-    public async Task RestoreDynamicControlAsync(CancellationToken cancellationToken = default)
+    internal async Task<bool> RestoreDynamicControlInternalAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -243,9 +243,91 @@ public class IPMIService : IDisposable
         return fans;
     }
 
+    /// <summary>
+    /// Test IPMI connection
+    /// </summary>
+    public async Task<bool> TestConnectionAsync()
+    {
+        try
+        {
+            var result = await RunIpmitoolCommandAsync("mc info");
+            bool success = result.Contains("Device ID") || result.Contains("Manufacturer");
+            _logger.LogInformation("IPMI connection test: {Status}", success ? "SUCCESS" : "FAILED");
+            return success;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "IPMI connection test failed");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Get temperatures in standardized format
+    /// </summary>
+        var status = await GetFanStatusAsync(cancellationToken);
+        return status.Fans.Select(f => new FanReading
+        {
+            Name = f.Name,
+            SpeedRPM = f.RPM
+        }).ToList();
+    }
+
     public void Dispose()
     {
         //.Dispose is handled by using statements in RunIpmitoolCommandAsync
+    }
+
+    /// <summary>
+    /// Get temperatures in standardized format (interface implementation)
+    /// </summary>
+    public async Task<List<TemperatureReading>> GetTemperaturesAsync(CancellationToken cancellationToken = default)
+    {
+        var status = await GetTemperaturesStatusAsync(cancellationToken);
+        var readings = new List<TemperatureReading>();
+
+        foreach (var temp in status.AllTemperatures)
+        {
+            readings.Add(new TemperatureReading
+            {
+                Name = "Unknown Sensor",
+                Value = temp,
+                Unit = "°C"
+            });
+        }
+
+        return readings;
+    }
+
+    /// <summary>
+    /// Get fan status in standardized format (interface implementation)
+    /// </summary>
+    public async Task<List<FanReading>> GetFanStatusAsync(CancellationToken cancellationToken = default)
+    {
+        var status = await GetFanStatusInternalAsync(cancellationToken);
+        return status.Fans.Select(f => new FanReading
+        {
+            Name = f.Name,
+            SpeedRPM = f.RPM
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Set fan speed (interface implementation)
+    /// </summary>
+    public async Task<bool> SetFanSpeedAsync(int percentage, CancellationToken cancellationToken = default)
+    {
+        await SetFanSpeedInternalAsync(percentage, cancellationToken);
+        return true;
+    }
+
+    /// <summary>
+    /// Restore dynamic control (interface implementation)
+    /// </summary>
+    public async Task<bool> RestoreDynamicControlAsync(CancellationToken cancellationToken = default)
+    {
+        await RestoreDynamicControlInternalAsync(cancellationToken);
+        return true;
     }
 }
 
