@@ -1,15 +1,15 @@
 @{
-    ViewData["Title"] = "Fan Control Status";
+    ViewData["Title"] = "Server Monitor";
     Layout = "_Layout";
 }
 
-@model dynamic
+@model ServerMonitor.Core.Models.ServerMetrics
 
 <div class="dashboard">
     <!-- Compact Header -->
     <div class="header">
         <div class="header-left">
-            <h1>🖥️ Dell R720 XD</h1>
+            <h1>🖥️ @ViewBag.ProviderName</h1>
             <span class="status-badge" id="systemStatus">● Online</span>
         </div>
         <div class="update-info">
@@ -243,18 +243,22 @@
             const time = new Date(data.timestamp);
             document.getElementById('lastUpdate').textContent = time.toLocaleTimeString();
 
-            // Quick stats
-            document.getElementById('maxTemp').textContent = data.temperatureStatus.highest + '°C';
-            document.getElementById('avgRpm').textContent = data.fans.averageRPM + ' RPM';
-            document.getElementById('fanCount').textContent = data.fans.count + ' fans';
-            document.getElementById('totalPower').textContent = data.power.totalWatts.toFixed(1) + ' W';
-            document.getElementById('powerSource').textContent = data.power.source || 'Est';
-            document.getElementById('controlMode').textContent = data.mode;
-            document.getElementById('controlModeDetail').textContent = data.mode.includes('Manual') ? 'Manual' : 'Auto';
+            // Quick stats - new ServerMetrics shape
+            const maxTemp = data.maxTemperature || 0;
+            const avgRpm = data.averageRpm || 0;
+            const power = data.power || { totalWatts: 0, source: 'N/A' };
+            const totalWatts = power.totalWatts || 0;
+
+            document.getElementById('maxTemp').textContent = maxTemp.toFixed(1) + '°C';
+            document.getElementById('avgRpm').textContent = avgRpm + ' RPM';
+            document.getElementById('fanCount').textContent = (data.fans || []).length + ' fans';
+            document.getElementById('totalPower').textContent = totalWatts.toFixed(1) + ' W';
+            document.getElementById('powerSource').textContent = power.source || 'N/A';
+            document.getElementById('controlMode').textContent = data.currentMode || 'Unknown';
+            document.getElementById('controlModeDetail').textContent = data.overallHealth || '--';
 
             // Temperature indicator
             const tempIndicator = document.getElementById('tempIndicator');
-            const maxTemp = data.temperatureStatus.highest;
             if (maxTemp < 40) {
                 tempIndicator.className = 'quick-indicator good';
             } else if (maxTemp < 50) {
@@ -263,15 +267,15 @@
                 tempIndicator.className = 'quick-indicator bad';
             }
 
-            // Update sections
-            updateCpuCores(data.system.cpuCores);
-            updateSensors(data.sensors.temperatures);
-            updateGpus(data.system.gpus);
-            updateFans(data.fans);
+            // Update sections (mapped to new model shape)
+            updateCpuCores(data.cpuCores || []);
+            updateSensors(data.temperatures || []);
+            updateGpus(data.gpus || []);
+            updateFans(data.fans || []);
 
             // Update charts
             if (typeof Chart !== 'undefined') {
-                updateCharts(data);
+                updateCharts({ maxTemp, avgRpm, totalWatts });
             }
 
         } catch (error) {
@@ -290,13 +294,14 @@
         }
 
         grid.innerHTML = cores.map(core => {
-            const status = core.temperature < 45 ? 'good' : core.temperature < 55 ? 'warning' : 'bad';
-            const width = Math.min((core.temperature / 90) * 100, 100);
+            const temp = core.value || 0;
+            const status = temp < 45 ? 'good' : temp < 55 ? 'warning' : 'bad';
+            const width = Math.min((temp / 90) * 100, 100);
             return `
                 <div class="core-item ${core.isPackage ? 'package' : ''}">
                     <div class="core-name">${core.name}</div>
                     <div class="core-bar-bg"><div class="core-bar ${status}" style="width: ${width}%"></div></div>
-                    <div class="core-temp ${status}">${core.temperature}°C</div>
+                    <div class="core-temp ${status}">${temp.toFixed(1)}°C</div>
                 </div>
             `;
         }).join('');
@@ -312,13 +317,14 @@
         }
 
         grid.innerHTML = sensors.map(s => {
-            const status = s.temperature < 40 ? 'good' : s.temperature < 50 ? 'warning' : 'bad';
-            const width = Math.min((s.temperature / 90) * 100, 100);
+            const temp = s.value || 0;
+            const status = temp < 40 ? 'good' : temp < 50 ? 'warning' : 'bad';
+            const width = Math.min((temp / 90) * 100, 100);
             return `
                 <div class="sensor-item">
                     <div class="sensor-name">${s.name}</div>
                     <div class="sensor-bar-bg"><div class="sensor-bar ${status}" style="width: ${width}%"></div></div>
-                    <div class="sensor-temp ${status}">${s.temperature}°C</div>
+                    <div class="sensor-temp ${status}">${temp.toFixed(1)}°C</div>
                 </div>
             `;
         }).join('');
@@ -336,29 +342,30 @@
 
         section.style.display = 'block';
         grid.innerHTML = gpus.map(gpu => {
-            const status = gpu.temperature < 60 ? 'good' : gpu.temperature < 75 ? 'warning' : 'bad';
-            const width = Math.min((gpu.temperature / 100) * 100, 100);
+            const temp = gpu.temperature || 0;
+            const status = temp < 60 ? 'good' : temp < 75 ? 'warning' : 'bad';
+            const width = Math.min(temp, 100);
             return `
                 <div class="gpu-item">
                     <div class="gpu-name">${gpu.name}</div>
                     <div class="gpu-bar-bg"><div class="gpu-bar ${status}" style="width: ${width}%"></div></div>
-                    <div class="gpu-temp ${status}">${gpu.temperature}°C</div>
-                    ${gpu.fanSpeed ? `<div class="gpu-fan">💨 ${gpu.fanSpeed}%</div>` : ''}
+                    <div class="gpu-temp ${status}">${temp.toFixed(1)}°C</div>
+                    ${gpu.fanSpeedPercent ? `<div class="gpu-fan">💨 ${gpu.fanSpeedPercent}%</div>` : ''}
                 </div>
             `;
         }).join('');
     }
 
-    function updateFans(fansData) {
+    function updateFans(fans) {
         const grid = document.getElementById('fansGrid');
-        document.getElementById('fanListCount').textContent = fansData.count;
+        document.getElementById('fanListCount').textContent = fans.length;
 
-        if (fansData.fans.length === 0) {
+        if (fans.length === 0) {
             grid.innerHTML = '<div class="no-data">No data</div>';
             return;
         }
 
-        grid.innerHTML = fansData.fans.map(fan => {
+        grid.innerHTML = fans.map(fan => {
             const width = Math.min((fan.rpm / 20000) * 100, 100);
             return `
                 <div class="fan-item">
@@ -372,16 +379,11 @@
 
     function updateCharts(data) {
         const time = new Date().getTime();
+        const values = [data.maxTemp, data.avgRpm, data.totalWatts];
 
         [tempChart, fanChart, powerChart].forEach((chart, index) => {
-            const datasets = [
-                [data.temperatureStatus.highest],
-                [data.fans.averageRPM],
-                [data.power.totalWatts]
-            ][index];
-
             chart.data.labels.push(time);
-            chart.data.datasets[0].data.push(datasets[0]);
+            chart.data.datasets[0].data.push(values[index]);
 
             if (chart.data.labels.length > maxDataPoints) {
                 chart.data.labels.shift();
@@ -393,14 +395,14 @@
 
     async function setSpeed(speed) {
         try {
-            const response = await fetch('/api/control/manual', {
+            const response = await fetch(`/api/fans/speed/${speed}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ speed: speed })
+                headers: { 'Content-Type': 'application/json' }
             });
+            const ok = response.ok;
             const result = await response.json();
-            showMessage(result.success ? `✓ Fan at ${speed}%` : '✖ Failed', result.success ? 'success' : 'error');
-            if (result.success) updateDashboard();
+            showMessage(ok ? `✓ Fan at ${speed}%` : '✖ ' + (result.error || 'Failed'), ok ? 'success' : 'error');
+            if (ok) updateDashboard();
         } catch {
             showMessage('✖ Failed', 'error');
         }
@@ -408,10 +410,14 @@
 
     async function restoreDynamic() {
         try {
-            const response = await fetch('/api/control/dynamic', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+            const response = await fetch('/api/fans/auto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const ok = response.ok;
             const result = await response.json();
-            showMessage(result.success ? '✓ Auto mode' : '✖ Failed', result.success ? 'success' : 'error');
-            if (result.success) updateDashboard();
+            showMessage(ok ? '✓ Auto mode' : '✖ ' + (result.error || 'Failed'), ok ? 'success' : 'error');
+            if (ok) updateDashboard();
         } catch {
             showMessage('✖ Failed', 'error');
         }

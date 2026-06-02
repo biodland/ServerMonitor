@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <RootNamespace>ServerMonitor</RootNamespace>
+    <AssemblyName>ServerMonitor</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Microsoft.Extensions.Hosting is included in the Web SDK; explicit refs are not required.
+         All other dependencies (Configuration, Logging, DI, MVC) are part of the Web SDK as well. -->
+  </ItemGroup>
+
+</Project>
