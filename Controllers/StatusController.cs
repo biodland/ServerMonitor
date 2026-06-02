@@ -8,6 +8,7 @@ public class StatusController : Controller
     private readonly FanControlService _fanControlService;
     private readonly FanStatusLogger _statusLogger;
     private readonly GpuService _gpuService;
+    private readonly SystemMetricsService _systemMetricsService;
     private readonly IIPMIService _ipmiService;
     private readonly ILogger<StatusController> _logger;
 
@@ -15,12 +16,14 @@ public class StatusController : Controller
         FanControlService fanControlService,
         FanStatusLogger statusLogger,
         GpuService gpuService,
+        SystemMetricsService systemMetricsService,
         IIPMIService ipmiService,
         ILogger<StatusController> logger)
     {
         _fanControlService = fanControlService;
         _statusLogger = statusLogger;
         _gpuService = gpuService;
+        _systemMetricsService = systemMetricsService;
         _ipmiService = ipmiService;
         _logger = logger;
     }
@@ -39,6 +42,12 @@ public class StatusController : Controller
         
         // Get GPU temperatures
         var gpuTemps = await _gpuService.GetGpuTemperaturesAsync();
+        
+        // Get CPU core temperatures
+        var cpuCores = await _systemMetricsService.GetCpuCoreTemperaturesAsync();
+        
+        // Get power metrics
+        var powerMetrics = await _systemMetricsService.GetPowerMetricsAsync();
         
         // Get detailed sensor information
         var tempStatus = status.TemperatureStatus;
@@ -63,10 +72,21 @@ public class StatusController : Controller
                     rpm = f.RPM
                 })
             },
+            power = new
+            {
+                totalWatts = powerMetrics.TotalWatts,
+                source = powerMetrics.TotalSource,
+                cpuWatts = powerMetrics.CpuWatts,
+                powerSupply = powerMetrics.PowerSupply
+            },
+            system = new
+            {
+                cpuCores = cpuCores,
+                gpus = gpuTemps
+            },
             sensors = new
             {
-                temperatures = await GetAllTemperatureReadingsAsync(),
-                gpus = gpuTemps
+                temperatures = await GetAllTemperatureReadingsAsync()
             }
         });
     }
@@ -80,7 +100,7 @@ public class StatusController : Controller
         
         try
         {
-            var command = "ipmitool sensor | grep -E 'degrees C|Temp'";
+            var command = "ipmitool sensor | grep -E 'degrees C| Temp'";
             var output = await ExecuteCommandAsync(command);
             
             var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);

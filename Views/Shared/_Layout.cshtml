@@ -13,9 +13,9 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: #0f0f1a;
+            background: #0a0a12;
             color: #e0e0e0;
-            padding: 20px;
+            padding: 15px;
             min-height: 100vh;
         }
 
@@ -29,24 +29,24 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.08));
             border: 1px solid rgba(99, 102, 241, 0.2);
             border-radius: 12px;
-            padding: 20px 25px;
-            margin-bottom: 20px;
+            padding: 18px 22px;
+            margin-bottom: 18px;
         }
 
         .header-content h1 {
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             font-weight: 700;
             background: linear-gradient(135deg, #60a5fa, #a78bfa);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 5px;
+            margin-bottom: 4px;
         }
 
         .subtitle {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: #6b7280;
         }
 
@@ -57,10 +57,10 @@
         }
 
         .status-badge {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: #22c55e;
             background: rgba(34, 197, 94, 0.1);
-            padding: 4px 10px;
+            padding: 3px 10px;
             border-radius: 20px;
         }
 
@@ -74,7 +74,7 @@
             display: none;
             padding: 12px 16px;
             border-radius: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 18px;
             font-size: 0.9rem;
         }
 
@@ -92,81 +92,111 @@
             color: #ef4444;
         }
 
-        /* Stats Row */
-        .stats-row {
+        /* Stats Grid - Main Tiled Layout */
+        .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-            margin-bottom: 25px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 18px;
         }
 
-        .stat-card {
+        .tile-card {
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 12px;
-            padding: 20px;
+            padding: 18px;
             display: flex;
-            gap: 15px;
+            gap: 14px;
             align-items: center;
+            transition: all 0.3s ease;
         }
 
-        .stat-icon {
+        .tile-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .tile-icon {
             font-size: 2rem;
             opacity: 0.8;
         }
 
-        .stat-content {
+        .tile-content {
             flex: 1;
         }
 
-        .stat-label {
-            font-size: 0.75rem;
+        .tile-title {
+            font-size: 0.7rem;
             color: #6b7280;
             margin-bottom: 4px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
-        .stat-value {
-            font-size: 2rem;
+        .tile-value {
+            font-size: 1.8rem;
             font-weight: 700;
             color: #e0e0e0;
+            line-height: 1.2;
         }
 
-        .stat-value .unit {
-            font-size: 1rem;
+        .tile-value .unit {
+            font-size: 0.9rem;
             font-weight: 400;
             color: #6b7280;
         }
 
-        .stat-value-small {
-            font-size: 1.25rem;
+        .tile-value-small {
+            font-size: 1.1rem;
             font-weight: 600;
             color: #e0e0e0;
         }
 
-        .stat-detail {
-            font-size: 0.8rem;
+        .tile-status {
+            font-size: 0.75rem;
             color: #6b7280;
             margin-top: 4px;
         }
 
-        .stat-temperature .stat-value {
+        /* Tile-specific styles */
+        .tile-temperature .tile-value {
             background: linear-gradient(135deg, #f97316, #f59e0b);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .stat-fans .stat-value {
+        .tile-fans .tile-value {
             background: linear-gradient(135deg, #3b82f6, #06b6d4);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .stat-mode .stat-value-small {
+        .tile-power .tile-value {
+            background: linear-gradient(135deg, #ffd700, #ffaa00);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .tile-mode .tile-value-small {
             background: linear-gradient(135deg, #8b5cf6, #d946ef);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+        }
+
+        /* Main Grid Section */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr 1fr;
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+
+        .grid-section {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 18px;
         }
 
         /* Section Headers */
@@ -174,154 +204,184 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 14px;
         }
 
         .section-header h2 {
-            font-size: 1.1rem;
+            font-size: 1rem;
             font-weight: 600;
             color: #e0e0e0;
         }
 
-        .sensor-count, .gpu-count, .fan-count-detail {
-            font-size: 0.8rem;
+        .item-count {
+            font-size: 0.75rem;
             color: #6b7280;
             background: rgba(255, 255, 255, 0.05);
-            padding: 4px 10px;
+            padding: 3px 10px;
             border-radius: 20px;
         }
 
-        /* Sensors Grid */
-        .sensors-section, .gpus-section, .fans-section, .controls-section {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 15px;
-        }
-
-        .sensors-grid {
+        /* CPU Cores Grid - Tiled Layout */
+        .cpu-cores-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
         }
 
-        .sensor-card {
+        .core-tile {
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 10px;
-            padding: 15px;
+            border-radius: 8px;
+            padding: 12px 10px;
             text-align: center;
             transition: all 0.2s ease;
         }
 
-        .sensor-card:hover {
+        .core-tile.core-package {
             border-color: rgba(99, 102, 241, 0.3);
+            background: rgba(99, 102, 241, 0.08);
+        }
+
+        .core-tile:hover {
+            border-color: rgba(99, 102, 241, 0.5);
             transform: translateY(-2px);
         }
 
-        .sensor-name {
-            font-size: 0.8rem;
+        .core-name {
+            font-size: 0.65rem;
             color: #6b7280;
             margin-bottom: 8px;
             word-break: break-word;
         }
 
-        .sensor-value {
-            font-size: 1.5rem;
+        .core-visual {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .core-bar {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        .core-value {
+            font-size: 1rem;
             font-weight: 700;
         }
 
-        /* GPUs Grid */
-        .gpus-grid {
+        /* Sensors Grid - Tiled Layout */
+        .sensors-grid, .gpus-grid, .fans-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 10px;
         }
 
-        .gpu-card {
-            background: rgba(34, 197, 94, 0.05);
-            border: 1px solid rgba(34, 197, 94, 0.2);
-            border-radius: 10px;
-            padding: 15px;
+        .sensor-tile, .gpu-tile, .fan-tile {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+            transition: all 0.2s ease;
         }
 
+        .sensor-tile:hover, .gpu-tile:hover, .fan-tile:hover {
+            border-color: rgba(99, 102, 241, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .sensor-name, .fan-name {
+            font-size: 0.7rem;
+            color: #6b7280;
+            margin-bottom: 8px;
+            word-break: break-word;
+        }
+
+        .sensor-visual, .gpu-visual, .fan-visual {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .sensor-bar, .gpu-bar, .fan-bar {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        .sensor-value, .gpu-value {
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        .fan-value {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        /* GPU-specific styles */
         .gpu-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .gpu-name {
-            font-size: 0.85rem;
+            font-size: 0.7rem;
             font-weight: 600;
         }
 
         .gpu-type {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             color: #6b7280;
         }
 
-        .gpu-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #e0e0e0;
-        }
-
         .gpu-fan {
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             color: #6b7280;
             margin-top: 5px;
         }
 
-        /* Fan List */
-        .fan-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            max-height: 300px;
-            overflow-y: auto;
+        /* Charts Section */
+        .charts-section {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px;
+            margin-bottom: 18px;
         }
 
-        .fan-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 8px;
-            padding: 12px 15px;
+        .chart-container {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 18px;
         }
 
-        .fan-info {
-            flex: 1;
-        }
-
-        .fan-name {
-            font-size: 0.85rem;
-            color: #9ca3af;
-            margin-bottom: 6px;
-        }
-
-        .fan-bar {
-            height: 6px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
-            overflow: hidden;
-        }
-
-        .bar-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #3b82f6, #06b6d4);
-            border-radius: 3px;
-            transition: width 0.5s ease;
-        }
-
-        .fan-rpm {
-            font-size: 1.1rem;
+        .chart-container h3 {
+            font-size: 0.9rem;
             font-weight: 600;
             color: #e0e0e0;
-            margin-left: 15px;
+            margin-bottom: 12px;
+        }
+
+        .chart-container canvas {
+            max-height: 200px;
+        }
+
+        /* Fans Section */
+        .fans-section, .controls-section {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 18px;
         }
 
         /* Controls */
@@ -388,8 +448,8 @@
         .loading, .no-data {
             text-align: center;
             color: #6b7280;
-            padding: 30px;
-            font-size: 0.9rem;
+            padding: 25px;
+            font-size: 0.85rem;
         }
 
         /* Scrollbar */
@@ -411,15 +471,29 @@
             background: rgba(99, 102, 241, 0.7);
         }
 
-        /* Responsive */
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+        }
+
         @media (max-width: 768px) {
             .header {
                 flex-direction: column;
                 align-items: flex-start;
-                gap: 15px;
+                gap: 12px;
             }
 
-            .stats-row {
+            .stats-grid {
                 grid-template-columns: 1fr;
             }
 
@@ -430,6 +504,14 @@
 
             .speed-presets {
                 justify-content: center;
+            }
+
+            .cpu-cores-grid {
+                grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            }
+
+            .sensors-grid, .gpus-grid, .fans-grid {
+                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
             }
         }
     </style>

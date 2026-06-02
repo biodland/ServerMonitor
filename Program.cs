@@ -28,6 +28,7 @@ else
 // Register our services
 builder.Services.AddSingleton<FanStatusLogger>();
 builder.Services.AddSingleton<GpuService>();
+builder.Services.AddSingleton<SystemMetricsService>();
 builder.Services.AddSingleton<FanControlService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<FanControlService>());
 
