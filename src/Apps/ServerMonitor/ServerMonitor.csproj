@@ -7,9 +7,7 @@
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <RootNamespace>ServerMonitor</RootNamespace>
     <AssemblyName>ServerMonitor</AssemblyName>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <GenerateRazorAssemblyInfo>false</GenerateRazorAssemblyInfo>
-    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <OutputPath>..\..\..\build\$(Configuration)\$(MSBuildProjectName)\</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>

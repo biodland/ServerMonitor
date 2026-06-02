@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.0.0] - 2025-06-02
+## [2.0.0] - 2026-06-02
 
 ### Changed
 - **Project renamed** from IPMIFanControl to **ServerMonitor** to reflect the expanded scope beyond IPMI fan control
@@ -82,7 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.0.0] - 2025-06-01
+## [1.0.0] - 2026-06-01
 
 ### Added
 - Initial release of IPMIFanControl
