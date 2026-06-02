@@ -1,6 +1,6 @@
-# Contributing to IPMIFanControl
+# Contributing to ServerMonitor
 
-Thank you for your interest in contributing to IPMIFanControl! This document provides guidelines and instructions for contributing to the project.
+Thank you for your interest in contributing to ServerMonitor! This document provides guidelines and instructions for contributing to the project.
 
 ---
 
@@ -31,10 +31,11 @@ By participating in this project, you agree to uphold the following standards:
 
 ### Prerequisites
 
-- .NET 8.0 SDK
+- .NET 10.0 SDK
 - Git
 - A text editor or IDE (Visual Studio, VS Code, Rider, etc.)
 - IPMI-capable server for testing (optional but recommended)
+- Linux environment (ipmitool, lm-sensors for full functionality)
 
 ### Setting Up Development Environment
 
@@ -62,12 +63,14 @@ By participating in this project, you agree to uphold the following standards:
 
 5. **Run the Application**
    ```bash
-   dotnet run
+   # Requires root for ipmitool access on Linux
+   sudo dotnet run --project src/Apps/ServerMonitor
    ```
 
 6. **Test Locally**
-   - Configure your iDRAC settings in `appsettings.json`
+   - Copy `appsettings.json` to `appsettings.local.json` and configure your iDRAC/IPMI settings (the local file is git-ignored)
    - Access the web dashboard at `http://localhost:5000`
+   - Use the StatsCheck tool for quick system stats verification: `dotnet run --project src/Tools/StatsCheck`
    - Test the API endpoints using curl or Postman
 
 ---
@@ -110,7 +113,7 @@ dotnet build
 dotnet test
 
 # Manual testing
-dotnet run
+sudo dotnet run --project src/Apps/ServerMonitor
 ```
 
 ### 4. Commit Your Changes
@@ -119,7 +122,7 @@ Use clear, descriptive commit messages:
 
 ```bash
 git add .
-git commit -m "feat: add Prometheus metrics endpoint"
+git commit -m "feat: add SuperMicro server provider"
 ```
 
 #### Commit Message Format
@@ -145,13 +148,13 @@ Follow the conventional commits format:
 
 **Examples**:
 ```
-feat(api): add endpoint for historical temperature data
+feat(providers): add SuperMicro server provider with IPMI support
 
-fix(ipmi): resolve connection timeout issue
+fix(ipmi): resolve connection timeout for out-of-band client
 
-docs(readme): update installation instructions for Ubuntu 22.04
+docs(readme): update provider architecture diagram
 
-refactor(services): extract common IPMI logic into base class
+refactor(services): extract common monitoring logic into ServerProviderBase
 ```
 
 ### 5. Sync with Upstream
@@ -187,12 +190,13 @@ Follow the official C# coding conventions: https://docs.microsoft.com/en-us/dotn
 
 #### Naming Conventions
 
-- **Classes**: `PascalCase` (e.g., `IPMIService`)
+- **Classes**: `PascalCase` (e.g., `DellServerProvider`)
 - **Methods**: `PascalCase` (e.g., `GetTemperaturesAsync`)
-- **Properties**: `PascalCase` (e.g., `HighestTempCelsius`)
+- **Properties**: `PascalCase` (e.g., `MaxTemperature`)
 - **Local variables**: `camelCase` (e.g., `highestTemp`)
-- **Constants**: `PascalCase` (e.g., `MaxRetries`)
+- **Constants**: `PascalCase` (e.g., `MinSpeedPercentage`)
 - **Private fields**: `_camelCase` (e.g., `_logger`)
+- **Interfaces**: `IPascalCase` (e.g., `IServerProvider`, `IFanController`)
 
 #### Code Style
 
@@ -213,7 +217,7 @@ Follow the official C# coding conventions: https://docs.microsoft.com/en-us/dotn
 3. **Async/Await**: Always use `Async` suffix for async methods
 
    ```csharp
-   public async Task<TemperatureStatus> GetTemperaturesAsync()
+   public async Task<ServerMetrics> CollectMetricsAsync()
    {
        // ...
    }
@@ -224,11 +228,11 @@ Follow the official C# coding conventions: https://docs.microsoft.com/en-us/dotn
    ```csharp
    try
    {
-       // Code that might fail
+       var result = await _ipmiClient.ExecuteRawAsync(command);
    }
    catch (Exception ex)
    {
-       _logger.LogError(ex, "Failed to do something");
+       _logger.LogError(ex, "Failed to execute IPMI command");
        throw;
    }
    ```
@@ -237,15 +241,31 @@ Follow the official C# coding conventions: https://docs.microsoft.com/en-us/dotn
 
    ```csharp
    /// <summary>
-   /// Gets current temperature readings from iDRAC
+   /// Gets current temperature readings from the server provider
    /// </summary>
    /// <param name="cancellationToken">Cancellation token</param>
-   /// <returns>Temperature status with highest temperature</returns>
-   public async Task<TemperatureStatus> GetTemperaturesAsync(CancellationToken cancellationToken = default)
+   /// <returns>List of temperature readings with optional core temperatures</returns>
+   public async Task<List<TemperatureReading>> GetTemperaturesAsync(CancellationToken cancellationToken = default)
    {
        // ...
    }
    ```
+
+### Provider Architecture
+
+ServerMonitor uses a provider pattern for multi-vendor support. When adding support for a new server vendor:
+
+1. Create a new folder under `src/Apps/ServerMonitor/Providers/{VendorName}/`
+2. Implement `IServerProviderCandidate` for auto-detection (reads DMI/SMBIOS to identify vendor)
+3. Implement `IServerProvider` as the main provider class with `DisplayName` and `InitializeAsync`
+4. Implement the relevant sub-interfaces as needed:
+   - `ITemperatureMonitor` (set `SupportsCoreTemperatures` if lm-sensors is used)
+   - `IFanController`
+   - `IPowerMonitor`
+   - `IGpuMonitor`
+5. Inherit from `ServerProviderBase` for common logging and service resolution
+6. Register the provider candidate in `Program.cs` before `builder.Build()`
+7. Add the vendor to the `ServerVendor` enum in `Core/Enums/ServerVendor.cs`
 
 ### JavaScript/HTML/CSS Conventions
 
@@ -264,17 +284,18 @@ Add unit tests for new functionality:
 
 ```csharp
 [Fact]
-public async Task GetTemperaturesAsync_ReturnsCorrectHighestTemp()
+public async Task GetTemperaturesAsync_ReturnsReadingsWithStatus()
 {
     // Arrange
-    var service = new IPMIService();
+    var provider = new DellTemperatureMonitor(ipmiClient, lmSensorsParser, logger);
 
     // Act
-    var result = await service.GetTemperaturesAsync();
+    var result = await provider.GetTemperaturesAsync();
 
     // Assert
     Assert.NotNull(result);
-    Assert.True(result.HighestTempCelsius >= 0);
+    Assert.All(result, r => Assert.True(r.Celsius >= 0));
+    Assert.All(result, r => Assert.NotNull(r.Status));
 }
 ```
 
@@ -284,29 +305,39 @@ Test the application end-to-end:
 
 ```bash
 # Run the application
-dotnet run
+sudo dotnet run --project src/Apps/ServerMonitor
 
 # Test endpoints
 curl http://localhost:5000/api/status
-curl -X POST http://localhost:5000/api/control/manual -H "Content-Type: application/json" -d '{"speed": 20}'
+curl http://localhost:5000/api/provider
+curl http://localhost:5000/api/stats
+curl http://localhost:5000/api/stats/history
+curl -X POST http://localhost:5000/api/fans/speed/30
+curl -X POST http://localhost:5000/api/fans/auto
+
+# Test with StatsCheck tool
+dotnet run --project src/Tools/StatsCheck
 ```
 
 ### Manual Testing Checklist
 
 Before submitting a PR, test:
 
-- [ ] Application builds without errors
+- [ ] Application builds without errors (`dotnet build`)
 - [ ] Web dashboard loads correctly
-- [ ] Temperature monitoring works
-- [ ] Fan control responds correctly
+- [ ] System Stats page loads and displays CPU, memory, network, storage
+- [ ] Temperature monitoring works (IPMI + lm-sensors core temps)
+- [ ] Fan control responds correctly (manual speed and auto mode)
+- [ ] GPU monitoring displays data (if applicable GPUs are present)
 - [ ] API endpoints return expected results
-- [ ] Error handling works as expected
+- [ ] Provider auto-detection works correctly
+- [ ] Error handling works as expected (e.g., ipmitool unavailable)
 - [ ] Configuration is properly validated
 - [ ] Logging captures appropriate information
 
 ---
 
-## 📤 Submitting Changes
+## 📬 Submitting Changes
 
 ### Pull Request Checklist
 
@@ -315,7 +346,7 @@ Before submitting a PR, ensure:
 - [ ] Your code follows the coding standards
 - [ ] Code compiles without warnings
 - [ ] Tests pass successfully
-- [ ] Documentation is updated (README, API docs, etc.)
+- [ ] Documentation is updated (README, DESIGN, CHANGELOG, etc.)
 - [ ] Commit messages follow the conventional format
 - [ ] Branch is up to date with upstream/main
 - [ ] PR description clearly explains the changes
@@ -355,9 +386,9 @@ Add screenshots for UI changes.
 
 ### Before Creating an Issue
 
-1. **Search existing issues** - Check if the issue has already been reported
-2. **Check documentation** - Review README and other docs
-3. **Test with latest version** - Ensure the issue exists in the latest release
+1. **Search existing issues** — Check if the issue has already been reported
+2. **Check documentation** — Review README and DESIGN docs
+3. **Test with latest version** — Ensure the issue exists in the latest release
 
 ### Issue Template
 
@@ -380,9 +411,10 @@ What actually happened
 
 ## Environment
 - OS: [e.g., Ubuntu 22.04]
-- .NET Version: [e.g., 8.0.2]
-- Server Model: [e.g., Dell R720 XD]
-- Application Version: [e.g., 1.0.0]
+- .NET Version: [e.g., 10.0]
+- Server Model: [e.g., Dell PowerEdge R740XD]
+- Provider: [e.g., Dell / auto-detected]
+- Application Version: [e.g., 2.0.0]
 
 ## Logs
 Relevant log messages or console output
@@ -402,6 +434,17 @@ We welcome feature requests! When requesting a feature:
 3. **Consider** whether you're willing to implement it
 4. **Discuss** the implementation approach if possible
 
+### Current Development Priorities
+
+The project roadmap is tracked in DESIGN.md. Current focus areas:
+
+- **Phase 3**: Additional vendor providers (SuperMicro, HPE, Lenovo)
+- **Phase 4**: Thermal curve fan profiles
+- **Phase 5**: Persistent configuration storage
+- **Phase 6**: Native IPMI library
+
+Contributions aligned with these phases are especially welcome.
+
 ---
 
 ## 📝 Documentation
@@ -412,13 +455,14 @@ We welcome feature requests! When requesting a feature:
 - Use code examples where appropriate
 - Include troubleshooting steps
 - Update diagrams/screenshots when UI changes
+- Ensure documentation reflects actual code (not aspirational features)
 
 ### Where to Document
 
-- **README.md** - Project overview, quick start, main features
-- **API docs** - In-code XML documentation
-- **Wiki** - Detailed guides, tutorials, advanced topics
-- **CHANGELOG.md** - Version history
+- **README.md** — Project overview, quick start, main features, API reference
+- **DESIGN.md** — Architecture, interfaces, data models, configuration schema, roadmap
+- **CHANGELOG.md** — Version history with breaking changes noted
+- **In-code XML documentation** — Public API documentation
 
 ---
 
@@ -428,22 +472,22 @@ Looking for something to work on? Here are some ideas:
 
 ### Easy (Good for First-Time Contributors)
 - Improve documentation
-- Add more examples to README
-- Fix small UI bugs
-- Add unit tests
+- Add more API examples to README
+- Fix small UI bugs on dashboard or stats pages
+- Add unit tests for existing providers
 
 ### Medium
-- Add new temperature threshold options
-- Improve error messages
-- Add more configuration options
-- Enhance logging
+- Add a new server vendor provider (SuperMicro, HPE, etc.)
+- Improve error messages and logging
+- Add more configuration options for fan control
+- Enhance system stats collection
 
 ### Advanced
 - Add Prometheus metrics export
-- Implement authentication/authorization
-- Add support for multiple servers
+- Implement thermal curve fan profiles
+- Build a native IPMI library (replace ipmitool CLI wrapper)
+- Add authentication/authorization
 - Create mobile app or PWA
-- Add machine learning for fan optimization
 
 ---
 
@@ -457,11 +501,13 @@ Looking for something to work on? Here are some ideas:
 
 ## 🙏 Thank You
 
-Thank you for contributing to IPMIFanControl! Your contributions help make this project better for everyone.
+Thank you for contributing to ServerMonitor! Your contributions help make this project better for everyone.
 
 ---
 
 For more information, see:
 - [Project README](README.md)
+- [Design Document](DESIGN.md)
+- [Changelog](CHANGELOG.md)
 - [License](LICENSE)
-- [MIT License](https://choosealicense.com/licenses/mit/)
+- [MIT License](https://choosealicens.com/licenses/mit/)
