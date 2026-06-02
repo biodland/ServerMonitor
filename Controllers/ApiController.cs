@@ -14,15 +14,18 @@ public class ApiController : ControllerBase
 {
     private readonly IMetricsCollectorService _metrics;
     private readonly IServerProvider _provider;
+    private readonly ISystemStatsService _stats;
     private readonly ILogger<ApiController> _logger;
 
     public ApiController(
         IMetricsCollectorService metrics,
         IServerProvider provider,
+        ISystemStatsService stats,
         ILogger<ApiController> logger)
     {
         _metrics = metrics;
         _provider = provider;
+        _stats = stats;
         _logger = logger;
     }
 
@@ -100,5 +103,32 @@ public class ApiController : ControllerBase
     {
         var ok = await _provider.TestConnectionAsync(cancellationToken);
         return Ok(new { connected = ok, provider = _provider.DisplayName });
+    }
+
+    // ------------------------------ System stats ------------------------------
+
+    /// <summary>Latest system stats snapshot (CPU/memory/network/storage)</summary>
+    [HttpGet("stats")]
+    public async Task<ActionResult<SystemStats>> GetStats(CancellationToken cancellationToken)
+    {
+        var snap = _stats.Latest ?? await _stats.RefreshAsync(cancellationToken);
+        return Ok(snap);
+    }
+
+    /// <summary>Stats history for graphing (compact, time-series only)</summary>
+    [HttpGet("stats/history")]
+    public IActionResult GetStatsHistory()
+    {
+        var hist = _stats.History;
+        return Ok(hist.Select(s => new
+        {
+            timestamp = s.Timestamp,
+            cpuUsage = s.Cpu.UsagePercent,
+            memUsage = s.Memory.UsagePercent,
+            netRxTotal = s.NetworkInterfaces.Sum(i => i.ReceiveBytesPerSec),
+            netTxTotal = s.NetworkInterfaces.Sum(i => i.TransmitBytesPerSec),
+            diskReadTotal = s.StorageDevices.Sum(d => d.ReadBytesPerSec),
+            diskWriteTotal = s.StorageDevices.Sum(d => d.WriteBytesPerSec),
+        }));
     }
 }

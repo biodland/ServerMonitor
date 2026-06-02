@@ -1,0 +1,461 @@
+@{
+    ViewData["Title"] = "System Stats";
+    Layout = "_Layout";
+}
+
+@model ServerMonitor.Core.Models.SystemStats
+
+<style>
+    .stats-page { max-width: 1400px; margin: 0 auto; }
+
+    .stats-header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 12px 16px; margin-bottom: 12px;
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 10px;
+    }
+    .stats-header h1 {
+        font-size: 1.2rem; font-weight: 600;
+        background: linear-gradient(135deg, #60a5fa, #a78bfa);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .meta { font-size: 0.75rem; color: #888; }
+    .meta strong { color: #ccc; font-weight: 500; }
+
+    /* Top KPI strip */
+    .kpis {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    .kpi {
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 10px;
+        padding: 14px;
+        position: relative;
+        overflow: hidden;
+    }
+    .kpi-label {
+        font-size: 0.65rem; text-transform: uppercase;
+        letter-spacing: 0.5px; color: #666; margin-bottom: 6px;
+    }
+    .kpi-value { font-size: 1.6rem; font-weight: 700; }
+    .kpi-sub { font-size: 0.7rem; color: #888; margin-top: 2px; }
+    .kpi-bar {
+        position: absolute; left: 0; right: 0; bottom: 0;
+        height: 3px; background: rgba(255,255,255,0.05);
+    }
+    .kpi-bar-fill {
+        height: 100%; transition: width 0.4s ease, background 0.3s;
+        background: linear-gradient(90deg, #22c55e, #4ade80);
+    }
+    .kpi-bar-fill.warning { background: linear-gradient(90deg, #eab308, #facc15); }
+    .kpi-bar-fill.bad { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+    /* Grid layout */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    .card {
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 10px;
+        padding: 14px;
+        min-width: 0;
+    }
+    .card.full { grid-column: span 2; }
+
+    .card-title {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 0.9rem; font-weight: 600;
+        margin-bottom: 12px;
+        color: #ddd;
+    }
+    .card-title .badge {
+        margin-left: auto;
+        font-size: 0.65rem; color: #888;
+        background: rgba(255,255,255,0.04);
+        padding: 2px 8px; border-radius: 10px;
+    }
+
+    /* Per-core CPU mini bars */
+    .cores { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+    .core {
+        background: rgba(255,255,255,0.03); border-radius: 6px; padding: 8px 10px;
+    }
+    .core-head { display: flex; justify-content: space-between; font-size: 0.72rem; color: #aaa; }
+    .core-bar { height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+    .core-fill { height: 100%; transition: width 0.4s; background: #60a5fa; }
+    .core-fill.warning { background: #facc15; }
+    .core-fill.bad { background: #f87171; }
+
+    /* Tables */
+    table.data {
+        width: 100%; border-collapse: collapse; font-size: 0.78rem;
+    }
+    table.data th {
+        text-align: left; padding: 6px 8px;
+        font-size: 0.66rem; text-transform: uppercase;
+        letter-spacing: 0.5px; color: #666; font-weight: 600;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    table.data td {
+        padding: 6px 8px;
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    table.data tr:last-child td { border-bottom: none; }
+    table.data .num { text-align: right; font-variant-numeric: tabular-nums; }
+    table.data .name { color: #fff; font-weight: 500; }
+    table.data .muted { color: #888; }
+
+    .pill {
+        display: inline-block;
+        font-size: 0.65rem; padding: 1px 7px; border-radius: 8px;
+        background: rgba(255,255,255,0.05); color: #aaa;
+    }
+    .pill.up { color: #4ade80; background: rgba(34,197,94,0.1); }
+    .pill.down { color: #f87171; background: rgba(239,68,68,0.1); }
+
+    .progress-cell { width: 120px; }
+    .progress {
+        height: 6px; background: rgba(255,255,255,0.06);
+        border-radius: 3px; overflow: hidden;
+    }
+    .progress-fill {
+        height: 100%; transition: width 0.4s; background: #60a5fa;
+    }
+    .progress-fill.warning { background: #facc15; }
+    .progress-fill.bad { background: #f87171; }
+
+    .empty { color: #666; font-size: 0.8rem; padding: 8px; text-align: center; }
+
+    @@media (max-width: 900px) {
+        .stats-grid { grid-template-columns: 1fr; }
+        .card.full { grid-column: span 1; }
+        .kpis { grid-template-columns: repeat(2, 1fr); }
+    }
+</style>
+
+<div class="stats-page">
+    <div class="stats-header">
+        <div>
+            <h1>📊 System Stats</h1>
+        </div>
+        <div class="meta">
+            <span id="hostname">Loading...</span> ·
+            <span id="kernel"></span> ·
+            <span id="uptime"></span> ·
+            <span id="lastUpdate"></span>
+        </div>
+    </div>
+
+    <!-- KPI strip -->
+    <div class="kpis">
+        <div class="kpi">
+            <div class="kpi-label">CPU</div>
+            <div class="kpi-value"><span id="cpuUsage">--</span>%</div>
+            <div class="kpi-sub" id="cpuSub">load: --</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="cpuBar" style="width: 0%"></div></div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Memory</div>
+            <div class="kpi-value"><span id="memUsage">--</span>%</div>
+            <div class="kpi-sub" id="memSub">-- / -- GiB</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="memBar" style="width: 0%"></div></div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Network ↓ / ↑</div>
+            <div class="kpi-value" style="font-size: 1.1rem;">
+                <span id="netRx">--</span> / <span id="netTx">--</span>
+            </div>
+            <div class="kpi-sub" id="netSub">-- interfaces</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Disk R / W</div>
+            <div class="kpi-value" style="font-size: 1.1rem;">
+                <span id="diskR">--</span> / <span id="diskW">--</span>
+            </div>
+            <div class="kpi-sub" id="diskSub">-- devices</div>
+        </div>
+    </div>
+
+    <!-- Grid: CPU + Memory cards -->
+    <div class="stats-grid">
+        <!-- CPU details -->
+        <div class="card">
+            <div class="card-title">
+                🖥️ CPU
+                <span class="badge" id="cpuModel">--</span>
+            </div>
+            <div id="cpuBreakdown" style="font-size: 0.8rem; color: #aaa; margin-bottom: 10px;"></div>
+            <div class="cores" id="coresGrid"></div>
+        </div>
+
+        <!-- Memory details -->
+        <div class="card">
+            <div class="card-title">💾 Memory</div>
+            <table class="data">
+                <tbody id="memTable"></tbody>
+            </table>
+        </div>
+
+        <!-- Network interfaces -->
+        <div class="card full">
+            <div class="card-title">
+                🌐 Network Interfaces
+                <span class="badge" id="netCount">0</span>
+            </div>
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th>Interface</th>
+                        <th>Status</th>
+                        <th>Speed</th>
+                        <th>IPv4</th>
+                        <th class="num">RX rate</th>
+                        <th class="num">TX rate</th>
+                        <th class="num">RX total</th>
+                        <th class="num">TX total</th>
+                        <th class="num">Errors</th>
+                    </tr>
+                </thead>
+                <tbody id="netTable"></tbody>
+            </table>
+        </div>
+
+        <!-- Storage volumes (filesystems) -->
+        <div class="card">
+            <div class="card-title">
+                📁 Filesystems
+                <span class="badge" id="volCount">0</span>
+            </div>
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th>Mount</th>
+                        <th>Type</th>
+                        <th class="num">Size</th>
+                        <th class="num">Free</th>
+                        <th class="num">Used</th>
+                        <th>Usage</th>
+                    </tr>
+                </thead>
+                <tbody id="volTable"></tbody>
+            </table>
+        </div>
+
+        <!-- Storage devices (block devices) -->
+        <div class="card">
+            <div class="card-title">
+                💽 Block Devices
+                <span class="badge" id="diskCount">0</span>
+            </div>
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th>Model</th>
+                        <th class="num">Size</th>
+                        <th class="num">Read/s</th>
+                        <th class="num">Write/s</th>
+                        <th class="num">Temp</th>
+                    </tr>
+                </thead>
+                <tbody id="diskTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    const refreshIntervalMs = 2000;
+
+    // ----- Formatting helpers -----
+    function fmtBytes(n) {
+        if (n == null || isNaN(n)) return '--';
+        const units = ['B','KiB','MiB','GiB','TiB','PiB'];
+        let i = 0;
+        while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+        return (i === 0 ? n.toFixed(0) : n.toFixed(n < 10 ? 2 : 1)) + ' ' + units[i];
+    }
+    function fmtRate(n) {
+        if (n == null || isNaN(n)) return '--';
+        return fmtBytes(n) + '/s';
+    }
+    function fmtUptime(sec) {
+        if (!sec) return '--';
+        const d = Math.floor(sec / 86400);
+        const h = Math.floor((sec % 86400) / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        if (d > 0) return `${d}d ${h}h ${m}m`;
+        if (h > 0) return `${h}h ${m}m`;
+        return `${m}m`;
+    }
+    function statusOf(pct, warn, bad) {
+        if (pct >= bad) return 'bad';
+        if (pct >= warn) return 'warning';
+        return '';
+    }
+
+    // ----- Data loader -----
+    async function load() {
+        try {
+            const resp = await fetch('/api/stats');
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
+            render(data);
+        } catch (e) {
+            console.error('Stats fetch failed', e);
+        }
+    }
+
+    function render(data) {
+        // Header meta
+        document.getElementById('hostname').textContent = data.hostname || '--';
+        document.getElementById('kernel').textContent = 'kernel ' + (data.kernelVersion || '--');
+        document.getElementById('uptime').textContent = 'up ' + fmtUptime(data.uptimeSeconds);
+        document.getElementById('lastUpdate').textContent =
+            new Date(data.timestamp).toLocaleTimeString();
+
+        // CPU KPI
+        const cpu = data.cpu || {};
+        const cpuPct = cpu.usagePercent || 0;
+        document.getElementById('cpuUsage').textContent = cpuPct.toFixed(1);
+        document.getElementById('cpuSub').textContent =
+            `load: ${(cpu.loadAverage1Min || 0).toFixed(2)} ${(cpu.loadAverage5Min || 0).toFixed(2)} ${(cpu.loadAverage15Min || 0).toFixed(2)}`;
+        const cpuBar = document.getElementById('cpuBar');
+        cpuBar.style.width = Math.min(cpuPct, 100) + '%';
+        cpuBar.className = 'kpi-bar-fill ' + statusOf(cpuPct, 70, 90);
+
+        // Memory KPI
+        const mem = data.memory || {};
+        const memPct = mem.usagePercent || 0;
+        document.getElementById('memUsage').textContent = memPct.toFixed(1);
+        document.getElementById('memSub').textContent =
+            `${fmtBytes(mem.usedBytes)} / ${fmtBytes(mem.totalBytes)}`;
+        const memBar = document.getElementById('memBar');
+        memBar.style.width = Math.min(memPct, 100) + '%';
+        memBar.className = 'kpi-bar-fill ' + statusOf(memPct, 75, 90);
+
+        // Network KPI
+        const ifs = data.networkInterfaces || [];
+        const totalRx = ifs.reduce((s, i) => s + (i.receiveBytesPerSec || 0), 0);
+        const totalTx = ifs.reduce((s, i) => s + (i.transmitBytesPerSec || 0), 0);
+        document.getElementById('netRx').textContent = fmtRate(totalRx);
+        document.getElementById('netTx').textContent = fmtRate(totalTx);
+        document.getElementById('netSub').textContent = `${ifs.length} interfaces`;
+
+        // Disk KPI
+        const devs = data.storageDevices || [];
+        const totalR = devs.reduce((s, d) => s + (d.readBytesPerSec || 0), 0);
+        const totalW = devs.reduce((s, d) => s + (d.writeBytesPerSec || 0), 0);
+        document.getElementById('diskR').textContent = fmtRate(totalR);
+        document.getElementById('diskW').textContent = fmtRate(totalW);
+        document.getElementById('diskSub').textContent = `${devs.length} devices`;
+
+        // CPU details
+        document.getElementById('cpuModel').textContent =
+            (cpu.modelName || 'Unknown CPU').slice(0, 50);
+        document.getElementById('cpuBreakdown').innerHTML =
+            `User: <strong>${(cpu.userPercent || 0).toFixed(1)}%</strong> · ` +
+            `System: <strong>${(cpu.systemPercent || 0).toFixed(1)}%</strong> · ` +
+            `IO wait: <strong>${(cpu.ioWaitPercent || 0).toFixed(1)}%</strong> · ` +
+            `Idle: <strong>${(cpu.idlePercent || 0).toFixed(1)}%</strong> · ` +
+            `Cores: <strong>${cpu.coreCount || 0}</strong>`;
+
+        const cores = cpu.perCoreUsage || [];
+        document.getElementById('coresGrid').innerHTML = cores.map((u, i) => {
+            const pct = u || 0;
+            const cls = statusOf(pct, 70, 90);
+            return `
+                <div class="core">
+                    <div class="core-head"><span>Core ${i}</span><span>${pct.toFixed(0)}%</span></div>
+                    <div class="core-bar"><div class="core-fill ${cls}" style="width: ${Math.min(pct, 100)}%"></div></div>
+                </div>`;
+        }).join('') || '<div class="empty">No per-core data</div>';
+
+        // Memory table
+        const memRow = (label, value, pct) => `
+            <tr>
+                <td class="muted">${label}</td>
+                <td class="name">${value}</td>
+                ${pct != null ? `<td class="progress-cell"><div class="progress"><div class="progress-fill ${statusOf(pct, 75, 90)}" style="width: ${Math.min(pct, 100)}%"></div></div></td>` : '<td></td>'}
+            </tr>`;
+        document.getElementById('memTable').innerHTML = `
+            ${memRow('Total', fmtBytes(mem.totalBytes))}
+            ${memRow('Used', fmtBytes(mem.usedBytes), memPct)}
+            ${memRow('Available', fmtBytes(mem.availableBytes))}
+            ${memRow('Free', fmtBytes(mem.freeBytes))}
+            ${memRow('Buffers', fmtBytes(mem.buffersBytes))}
+            ${memRow('Cached', fmtBytes(mem.cachedBytes))}
+            ${memRow('Swap', `${fmtBytes(mem.swapUsedBytes)} / ${fmtBytes(mem.swapTotalBytes)}`, mem.swapUsagePercent || 0)}
+        `;
+
+        // Network interfaces
+        document.getElementById('netCount').textContent = ifs.length;
+        document.getElementById('netTable').innerHTML = ifs.length === 0
+            ? '<tr><td colspan="9" class="empty">No interfaces</td></tr>'
+            : ifs.map(i => {
+                const errors = (i.receiveErrors || 0) + (i.transmitErrors || 0);
+                return `
+                <tr>
+                    <td class="name">${i.name}</td>
+                    <td><span class="pill ${i.isUp ? 'up' : 'down'}">${i.isUp ? 'up' : 'down'}</span></td>
+                    <td class="muted">${i.speedMbps > 0 ? i.speedMbps + ' Mbps' : '--'}</td>
+                    <td class="muted">${(i.ipAddresses || []).join(', ') || '--'}</td>
+                    <td class="num">${fmtRate(i.receiveBytesPerSec)}</td>
+                    <td class="num">${fmtRate(i.transmitBytesPerSec)}</td>
+                    <td class="num muted">${fmtBytes(i.bytesReceived)}</td>
+                    <td class="num muted">${fmtBytes(i.bytesSent)}</td>
+                    <td class="num ${errors > 0 ? '' : 'muted'}">${errors}</td>
+                </tr>`;
+            }).join('');
+
+        // Volumes
+        const vols = data.storageVolumes || [];
+        document.getElementById('volCount').textContent = vols.length;
+        document.getElementById('volTable').innerHTML = vols.length === 0
+            ? '<tr><td colspan="6" class="empty">No volumes</td></tr>'
+            : vols.map(v => {
+                const pct = v.usagePercent || 0;
+                return `
+                <tr>
+                    <td class="name">${v.mountPoint}</td>
+                    <td class="muted">${v.filesystemType}</td>
+                    <td class="num">${fmtBytes(v.totalBytes)}</td>
+                    <td class="num">${fmtBytes(v.availableBytes)}</td>
+                    <td class="num">${fmtBytes(v.usedBytes)} (${pct.toFixed(0)}%)</td>
+                    <td class="progress-cell">
+                        <div class="progress">
+                            <div class="progress-fill ${statusOf(pct, 80, 92)}" style="width: ${Math.min(pct, 100)}%"></div>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+
+        // Block devices
+        document.getElementById('diskCount').textContent = devs.length;
+        document.getElementById('diskTable').innerHTML = devs.length === 0
+            ? '<tr><td colspan="6" class="empty">No devices</td></tr>'
+            : devs.map(d => `
+                <tr>
+                    <td class="name">${d.name} <span class="pill">${d.isRotational ? 'HDD' : 'SSD'}</span></td>
+                    <td class="muted">${(d.model || '--').slice(0, 28)}</td>
+                    <td class="num">${fmtBytes(d.sizeBytes)}</td>
+                    <td class="num">${fmtRate(d.readBytesPerSec)}</td>
+                    <td class="num">${fmtRate(d.writeBytesPerSec)}</td>
+                    <td class="num ${d.temperatureCelsius == null ? 'muted' : ''}">
+                        ${d.temperatureCelsius != null ? d.temperatureCelsius.toFixed(0) + '°C' : '--'}
+                    </td>
+                </tr>`).join('');
+    }
+
+    load();
+    setInterval(load, refreshIntervalMs);
+</script>

@@ -36,6 +36,9 @@ builder.Services.AddSingleton<IServerProviderFactory, ServerProviderFactory>();
 // Infrastructure - GPU
 builder.Services.AddSingleton<IGpuMonitor, GpuMonitor>();
 
+// Infrastructure - System stats
+builder.Services.AddSingleton<ISystemStatsCollector, LinuxSystemStatsCollector>();
+
 // Provider candidates - registered as IServerProviderCandidate so they can be
 // enumerated by the factory without conflicting with the single active
 // IServerProvider registration below.
@@ -55,6 +58,10 @@ builder.Services.AddSingleton<IServerProviderCandidate, DellGenericProvider>();
 builder.Services.AddSingleton<MetricsCollectorService>();
 builder.Services.AddSingleton<IMetricsCollectorService>(sp => sp.GetRequiredService<MetricsCollectorService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MetricsCollectorService>());
+
+builder.Services.AddSingleton<SystemStatsService>();
+builder.Services.AddSingleton<ISystemStatsService>(sp => sp.GetRequiredService<SystemStatsService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemStatsService>());
 
 builder.Services.AddHostedService<FanControlService>();
 

@@ -446,9 +446,44 @@
             .speed-buttons { justify-content: center; flex-wrap: wrap; }
             .controls-content { flex-direction: column; }
         }
+
+        /* Top navigation */
+        .topnav {
+            max-width: 1400px;
+            margin: 0 auto 12px;
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+        }
+        .topnav a {
+            flex: 1;
+            text-align: center;
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            color: #aaa;
+            text-decoration: none;
+            border-radius: 7px;
+            transition: background 0.15s, color 0.15s;
+        }
+        .topnav a:hover { color: #fff; background: rgba(255,255,255,0.04); }
+        .topnav a.active {
+            color: #fff;
+            background: linear-gradient(135deg, rgba(96,165,250,0.18), rgba(167,139,250,0.18));
+            border: 1px solid rgba(96,165,250,0.25);
+        }
     </style>
 </head>
 <body>
+    @{
+        var currentController = (string?)ViewContext.RouteData.Values["controller"] ?? "";
+    }
+    <nav class="topnav">
+        <a href="/Dashboard" class="@(currentController == "Dashboard" ? "active" : "")">🌡️ Dashboard</a>
+        <a href="/Stats" class="@(currentController == "Stats" ? "active" : "")">📊 System Stats</a>
+    </nav>
     @RenderBody()
 </body>
 </html>

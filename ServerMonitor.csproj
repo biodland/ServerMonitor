@@ -14,4 +14,12 @@
          All other dependencies (Configuration, Logging, DI, MVC) are part of the Web SDK as well. -->
   </ItemGroup>
 
+  <!-- Exclude the diagnostic tools subprojects from the main app's compilation -->
+  <ItemGroup>
+    <Compile Remove="tools/**" />
+    <Content Remove="tools/**" />
+    <None Remove="tools/**" />
+    <EmbeddedResource Remove="tools/**" />
+  </ItemGroup>
+
 </Project>

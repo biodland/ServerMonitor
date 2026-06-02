@@ -20,6 +20,7 @@
 - ⚡ **Power consumption** monitoring
 - 🎮 **GPU monitoring** (NVIDIA, AMD, Intel)
 - 📊 **Live dashboard** with charts and quick stats
+- 📈 **System Stats page** — CPU load, memory usage, per-NIC network throughput, filesystem & block-device I/O
 - 🔌 **REST API** for integration & automation
 
 ## Currently supported hardware
@@ -107,12 +108,42 @@ Open http://localhost:5000 to access the dashboard.
 
 | Method | Path                          | Description                            |
 |--------|-------------------------------|----------------------------------------|
-| GET    | `/api/status`                 | Latest metrics snapshot                |
+| GET    | `/api/status`                 | Latest hardware metrics snapshot       |
 | GET    | `/api/provider`               | Active provider info & capabilities    |
-| GET    | `/api/history`                | Metrics history for graphing           |
+| GET    | `/api/history`                | Hardware metrics history for graphing  |
 | GET    | `/api/test`                   | Test the IPMI / hardware connection    |
 | POST   | `/api/fans/speed/{percent}`   | Set manual fan speed (5-100%)          |
 | POST   | `/api/fans/auto`              | Restore automatic fan control          |
+| GET    | `/api/stats`                  | Latest system stats (CPU/mem/net/disk) |
+| GET    | `/api/stats/history`          | System stats history for graphing      |
+
+## System Stats
+
+The `/Stats` page (also available at the top-level nav) shows:
+
+- **CPU** — overall and per-core usage, load averages, user/system/iowait breakdown, model name
+- **Memory** — total / used / available / cached / buffers, swap usage
+- **Network** — per-interface status, link speed, IPv4 addresses, RX/TX rate, totals & errors
+- **Storage volumes** — every mounted filesystem with size, free, used, and usage bar
+- **Storage devices** — every block device (HDD/SSD) with size, R/W rate, model, and temperature when available
+
+### Filtering network interfaces
+
+By default virtual interfaces (`lo`, `veth*`, `br-*`, `docker*`, `virbr*`, `vnet*`,
+`tun*`, `tap*`, `wg*`) are hidden. Override via configuration:
+
+```json
+"ServerMonitor": {
+  "Stats": {
+    "Network": {
+      "Include": [ "eno1", "eno2" ],          // optional whitelist
+      "Exclude": [ "veth*", "br-*", "lo" ]    // overrides the defaults
+    }
+  }
+}
+```
+
+Both lists support `*` wildcards.
 
 ## Adding a new server provider
 
