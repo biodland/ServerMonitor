@@ -8,32 +8,36 @@ using ServerMonitor.Core.Models;
 namespace ServerMonitor.Infrastructure.Detection;
 
 /// <summary>
-/// Default implementation of the server provider factory
-/// Detects the server hardware and returns the best matching provider
+/// Marker for provider candidates. Concrete provider classes are registered
+/// against this interface so they can be enumerated by the factory without
+/// colliding with the single active <see cref="IServerProvider"/> registration.
+/// </summary>
+public interface IServerProviderCandidate : IServerProvider { }
+
+/// <summary>
+/// Default implementation of the server provider factory.
+/// Detects the server hardware and returns the best matching provider.
 /// </summary>
 public class ServerProviderFactory : IServerProviderFactory
 {
     private readonly IServerDetectionService _detection;
-    private readonly IServiceProvider _serviceProvider;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ServerProviderFactory> _logger;
-    private readonly IEnumerable<IServerProvider> _providers;
+    private readonly IEnumerable<IServerProviderCandidate> _candidates;
 
     public ServerProviderFactory(
         IServerDetectionService detection,
-        IServiceProvider serviceProvider,
         IConfiguration configuration,
         ILogger<ServerProviderFactory> logger,
-        IEnumerable<IServerProvider> providers)
+        IEnumerable<IServerProviderCandidate> candidates)
     {
         _detection = detection;
-        _serviceProvider = serviceProvider;
         _configuration = configuration;
         _logger = logger;
-        _providers = providers;
+        _candidates = candidates;
     }
 
-    public IEnumerable<IServerProvider> GetAvailableProviders() => _providers;
+    public IEnumerable<IServerProvider> GetAvailableProviders() => _candidates;
 
     public async Task<IServerProvider> CreateProviderAsync(CancellationToken cancellationToken = default)
     {
@@ -41,7 +45,7 @@ public class ServerProviderFactory : IServerProviderFactory
         var forced = _configuration["ServerMonitor:ForceProvider"];
         if (!string.IsNullOrEmpty(forced))
         {
-            var match = _providers.FirstOrDefault(p =>
+            var match = _candidates.FirstOrDefault(p =>
                 string.Equals(p.Model, forced, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(p.DisplayName, forced, StringComparison.OrdinalIgnoreCase));
 
@@ -59,7 +63,7 @@ public class ServerProviderFactory : IServerProviderFactory
         _logger.LogInformation("Detected server: {Vendor} {Model}", info.Vendor, info.Model);
 
         // Find the most specific matching provider (non-generic) first
-        var specific = _providers
+        var specific = _candidates
             .Where(p => p.IsSupported(info) && !p.Model.Equals("Generic", StringComparison.OrdinalIgnoreCase))
             .FirstOrDefault();
 
@@ -71,7 +75,7 @@ public class ServerProviderFactory : IServerProviderFactory
         }
 
         // Fall back to a generic provider matching the vendor
-        var generic = _providers
+        var generic = _candidates
             .Where(p => p.IsSupported(info))
             .FirstOrDefault();
 

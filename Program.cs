@@ -14,6 +14,11 @@ builder.Configuration
     .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 
+// Logging - configure early so DI-resolution diagnostics are visible
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.SetMinimumLevel(LogLevel.Information);
+
 // MVC
 builder.Services.AddControllersWithViews();
 
@@ -31,20 +36,20 @@ builder.Services.AddSingleton<IServerProviderFactory, ServerProviderFactory>();
 // Infrastructure - GPU
 builder.Services.AddSingleton<IGpuMonitor, GpuMonitor>();
 
-// Providers - register all known providers
-// Specific providers are tried first; DellGenericProvider is the fallback
-builder.Services.AddSingleton<IServerProvider, DellR720XdProvider>();
-builder.Services.AddSingleton<IServerProvider, DellR740XdProvider>();
-builder.Services.AddSingleton<IServerProvider, DellR240Provider>();
-builder.Services.AddSingleton<IServerProvider, DellGenericProvider>();
+// Provider candidates - registered as IServerProviderCandidate so they can be
+// enumerated by the factory without conflicting with the single active
+// IServerProvider registration below.
+// Specific providers are tried first; DellGenericProvider is the fallback.
+builder.Services.AddSingleton<IServerProviderCandidate, DellR720XdProvider>();
+builder.Services.AddSingleton<IServerProviderCandidate, DellR740XdProvider>();
+builder.Services.AddSingleton<IServerProviderCandidate, DellR240Provider>();
+builder.Services.AddSingleton<IServerProviderCandidate, DellGenericProvider>();
 // SuperMicro / ASRock providers can be added here when implemented
 
-// Active provider (resolved once at startup via factory)
-builder.Services.AddSingleton<IServerProvider>(sp =>
-{
-    var factory = sp.GetRequiredService<IServerProviderFactory>();
-    return factory.CreateProviderAsync().GetAwaiter().GetResult();
-});
+// The active IServerProvider is selected once at application startup
+// (before the host is built) and registered as a singleton instance.
+// This avoids blocking on async work inside the DI container, which can
+// cause silent hangs.
 
 // Application services
 builder.Services.AddSingleton<MetricsCollectorService>();
@@ -52,11 +57,6 @@ builder.Services.AddSingleton<IMetricsCollectorService>(sp => sp.GetRequiredServ
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MetricsCollectorService>());
 
 builder.Services.AddHostedService<FanControlService>();
-
-// Logging
-builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
-builder.Logging.SetMinimumLevel(LogLevel.Information);
 
 // Kestrel
 builder.WebHost.ConfigureKestrel(options =>
@@ -74,6 +74,65 @@ builder.WebHost.ConfigureKestrel(options =>
     Console.WriteLine("╚══════════════════════════════════════════════════════════════════╝");
     Console.WriteLine();
 });
+
+// ----- Resolve the active provider BEFORE building the WebApplication -----
+// We instantiate the minimal pieces needed for detection manually (avoiding
+// BuildServiceProvider, which would create duplicate singletons), then
+// register the resulting IServerProvider instance for the full app.
+
+Console.WriteLine("Detecting server hardware...");
+IServerProvider activeProvider;
+try
+{
+    using var loggerFactory = LoggerFactory.Create(b =>
+    {
+        b.AddConsole();
+        b.SetMinimumLevel(LogLevel.Information);
+    });
+
+    var shell = new ShellExecutor(loggerFactory.CreateLogger<ShellExecutor>());
+    var lmSensors = new LmSensorsParser(loggerFactory.CreateLogger<LmSensorsParser>(), shell);
+    var ipmiClient = new IpmiToolClient(
+        loggerFactory.CreateLogger<IpmiToolClient>(), shell, builder.Configuration);
+    var detection = new ServerDetectionService(
+        loggerFactory.CreateLogger<ServerDetectionService>(), shell);
+
+    var candidates = new IServerProviderCandidate[]
+    {
+        new DellR720XdProvider(ipmiClient, lmSensors, loggerFactory),
+        new DellR740XdProvider(ipmiClient, lmSensors, loggerFactory),
+        new DellR240Provider(ipmiClient, lmSensors, loggerFactory),
+        new DellGenericProvider(ipmiClient, lmSensors, loggerFactory),
+    };
+
+    var factory = new ServerProviderFactory(
+        detection,
+        builder.Configuration,
+        loggerFactory.CreateLogger<ServerProviderFactory>(),
+        candidates);
+
+    // Use a generous timeout - some BMCs are slow to respond
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+    activeProvider = await factory.CreateProviderAsync(cts.Token);
+
+    Console.WriteLine($"Active provider: {activeProvider.DisplayName} " +
+                      $"({activeProvider.Vendor} {activeProvider.Model})");
+}
+catch (Exception ex)
+{
+    Console.Error.WriteLine($"FATAL: Failed to initialize server provider: {ex.Message}");
+    Console.Error.WriteLine(ex.ToString());
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("Possible causes:");
+    Console.Error.WriteLine("  - ipmitool is not installed (apt-get install ipmitool)");
+    Console.Error.WriteLine("  - Insufficient permissions (try running with sudo)");
+    Console.Error.WriteLine("  - DMI/SMBIOS access blocked (/sys/class/dmi/id/)");
+    Console.Error.WriteLine("  - Hardware not yet supported (see DESIGN.md)");
+    return 1;
+}
+
+// Register the resolved provider as a singleton instance
+builder.Services.AddSingleton<IServerProvider>(activeProvider);
 
 var app = builder.Build();
 
@@ -93,26 +152,25 @@ app.MapControllerRoute(
 
 app.MapControllers(); // attribute-routed (e.g. ApiController)
 
-// Startup logging - resolve the provider so detection runs before serving requests
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
-logger.LogInformation("ServerMonitor starting...");
+logger.LogInformation("ServerMonitor starting (provider: {Provider})...", activeProvider.DisplayName);
 
-try
+// Test the hardware connection but don't block startup on it
+_ = Task.Run(async () =>
 {
-    var provider = app.Services.GetRequiredService<IServerProvider>();
-    logger.LogInformation("Active provider: {Provider} ({Vendor} {Model})",
-        provider.DisplayName, provider.Vendor, provider.Model);
+    try
+    {
+        var connected = await activeProvider.TestConnectionAsync();
+        if (connected)
+            logger.LogInformation("Hardware connection: SUCCESS");
+        else
+            logger.LogWarning("Hardware connection: FAILED - check IPMI configuration / ipmitool installation");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Hardware connection test failed");
+    }
+});
 
-    var connected = await provider.TestConnectionAsync();
-    if (connected)
-        logger.LogInformation("Hardware connection: SUCCESS");
-    else
-        logger.LogWarning("Hardware connection: FAILED - check IPMI configuration / ipmitool installation");
-}
-catch (Exception ex)
-{
-    logger.LogError(ex, "Failed to initialize server provider: {Message}", ex.Message);
-    logger.LogError("Ensure ipmitool is installed (apt-get install ipmitool) and your hardware is supported");
-}
-
-app.Run();
+await app.RunAsync();
+return 0;

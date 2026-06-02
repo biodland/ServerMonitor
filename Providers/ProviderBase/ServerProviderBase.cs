@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using ServerMonitor.Core.Enums;
 using ServerMonitor.Core.Interfaces;
 using ServerMonitor.Core.Models;
+using ServerMonitor.Infrastructure.Detection;
 
 namespace ServerMonitor.Providers.ProviderBase;
 
@@ -9,7 +10,7 @@ namespace ServerMonitor.Providers.ProviderBase;
 /// Base class for all server providers
 /// Provides common functionality and template methods
 /// </summary>
-public abstract class ServerProviderBase : IServerProvider
+public abstract class ServerProviderBase : IServerProvider, IServerProviderCandidate
 {
     protected readonly IIpmiClient IpmiClient;
     protected readonly ILogger Logger;
