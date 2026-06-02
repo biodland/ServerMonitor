@@ -4,293 +4,298 @@
 
 @model dynamic
 
-<div class="container">
+<div class="dashboard">
+    <!-- Header -->
     <div class="header">
-        <h1>🖥️ Dell R720 XD Fan Control</h1>
-        <div class="subtitle">Real-time Temperature & Fan Speed Monitoring</div>
-        <div class="status-info">
-            <span id="lastUpdate">Last update: Loading...</span>
-            <span class="refresh-indicator">🔄</span>
+        <div class="header-content">
+            <div class="title-row">
+                <h1>🖥️ Dell R720 XD</h1>
+                <span class="status-badge" id="systemStatus">● Online</span>
+            </div>
+            <div class="subtitle">Fan Control & Temperature Monitoring</div>
         </div>
+        <div class="last-update" id="lastUpdate">Loading...</div>
     </div>
 
-    <div id="errorMessage" class="error-message"></div>
+    <!-- Error/Success Message -->
+    <div id="message" class="message"></div>
 
-    <div class="cards-grid">
-        <!-- Temperature Card -->
-        <div class="card">
-            <div class="card-header">
-                <span class="icon">🌡️</span>
-                <h2>Temperature</h2>
-            </div>
-            <div class="main-value">
-                <span class="temperature" id="highestTemp">--</span>
-                <span class="unit">°C</span>
-            </div>
-            <div class="mode-badge" id="tempStatus">Loading...</div>
-            <div style="margin-top: 15px; color: #888; font-size: 0.85rem;">
-                All Sensors: <span id="allTempsCount">0</span> detected
+    <!-- Stats Row -->
+    <div class="stats-row">
+        <div class="stat-card stat-temperature">
+            <div class="stat-icon">🌡️</div>
+            <div class="stat-content">
+                <div class="stat-label">Max Temperature</div>
+                <div class="stat-value"><span id="maxTemp">--</span><span class="unit">°C</span></div>
+                <div class="stat-detail" id="tempStatus">Loading...</div>
             </div>
         </div>
 
-        <!-- Fan Speed Card -->
-        <div class="card">
-            <div class="card-header">
-                <span class="icon">💨</span>
-                <h2>Fan Speed</h2>
-            </div>
-            <div class="main-value">
-                <span class="rpm" id="avgFanRPM">--</span>
-                <span class="unit">RPM (avg)</span>
-            </div>
-            <div class="mode-badge" id="fanModeBadge">Loading...</div>
-            <div style="margin-top: 15px; color: #888; font-size: 0.85rem;">
-                <span id="fanCount">0</span> fans active
+        <div class="stat-card stat-fans">
+            <div class="stat-icon">💨</div>
+            <div class="stat-content">
+                <div class="stat-label">Avg Fan Speed</div>
+                <div class="stat-value"><span id="avgRpm">--</span><span class="unit">RPM</span></div>
+                <div class="stat-detail"><span id="fanCount">0</span> fans</div>
             </div>
         </div>
 
-        <!-- Control Mode Card -->
-        <div class="card">
-            <div class="card-header">
-                <span class="icon">⚙️</span>
-                <h2>Control Mode</h2>
-            </div>
-            <div style="text-align: center; margin: 30px 0;">
-                <span class="mode-badge mode-manual" id="controlModeBadge" style="font-size: 1.1rem; padding: 12px 24px;">
-                    Loading...
-                </span>
-            </div>
-            <div style="color: #888; font-size: 0.85rem; text-align: center;">
-                Current fan control strategy
+        <div class="stat-card stat-mode">
+            <div class="stat-icon">⚙️</div>
+            <div class="stat-content">
+                <div class="stat-label">Control Mode</div>
+                <div class="stat-value-small" id="controlMode">Loading...</div>
+                <div class="stat-detail" id="controlModeDetail">Manual/Auto</div>
             </div>
         </div>
     </div>
 
-    <!-- Fan Details Card -->
-    <div class="card">
-        <div class="card-header">
-            <span class="icon">📊</span>
-            <h2>Fan Details</h2>
+    <!-- Sensors Grid -->
+    <div class="sensors-section">
+        <div class="section-header">
+            <h2>📊 Temperature Sensors</h2>
+            <span class="sensor-count" id="sensorCount">0 sensors</span>
+        </div>
+        <div class="sensors-grid" id="sensorsGrid">
+            <div class="loading">Loading sensors...</div>
+        </div>
+    </div>
+
+    <!-- GPUs Section -->
+    <div class="gpus-section" id="gpusSection" style="display: none;">
+        <div class="section-header">
+            <h2>🎮 GPU Temperatures</h2>
+            <span class="gpu-count" id="gpuCount">0 GPUs</span>
+        </div>
+        <div class="gpus-grid" id="gpusGrid"></div>
+    </div>
+
+    <!-- Fan Details -->
+    <div class="fans-section">
+        <div class="section-header">
+            <h2>💨 Fan Status</h2>
+            <span class="fan-count-detail" id="fanCountDetail">0 fans</span>
         </div>
         <div class="fan-list" id="fanList">
-            <div style="text-align: center; color: #666; padding: 20px;">Loading fan information...</div>
+            <div class="loading">Loading fans...</div>
         </div>
     </div>
 
-    <!-- Control Panel -->
-    <div class="control-panel">
-        <h3>🎮 Manual Controls</h3>
-        
-        <div class="control-buttons">
-            <button class="btn btn-success" onclick="restoreDynamicControl()">
-                🔄 Restore Dynamic Control
-            </button>
-            <button class="btn btn-primary" onclick="toggleAutoControl()">
-                ⚡ Toggle Automatic Control
-            </button>
+    <!-- Controls -->
+    <div class="controls-section">
+        <div class="section-header">
+            <h2>🎛️ Speed Controls</h2>
         </div>
-
-        <div class="speed-controls">
-            <div style="width: 100%; color: #888; font-size: 0.85rem; margin-bottom: 10px;">
-                Quick Speed Presets:
+        <div class="controls-content">
+            <button class="btn btn-restore" onclick="restoreDynamic()">🔄 Restore Auto</button>
+            <div class="speed-presets">
+                <button class="speed-btn" onclick="setSpeed(10)">10%</button>
+                <button class="speed-btn" onclick="setSpeed(15)">15%</button>
+                <button class="speed-btn" onclick="setSpeed(20)">20%</button>
+                <button class="speed-btn" onclick="setSpeed(25)">25%</button>
+                <button class="speed-btn" onclick="setSpeed(35)">35%</button>
+                <button class="speed-btn" onclick="setSpeed(50)">50%</button>
             </div>
-            <button class="speed-btn" onclick="setFanSpeed(10)">10% (Quiet)</button>
-            <button class="speed-btn" onclick="setFanSpeed(15)">15% (Low)</button>
-            <button class="speed-btn" onclick="setFanSpeed(20)">20% (Medium)</button>
-            <button class="speed-btn" onclick="setFanSpeed(25)">25% (High)</button>
-            <button class="speed-btn" onclick="setFanSpeed(35)">35% (Very High)</button>
-            <button class="speed-btn" onclick="setFanSpeed(50)">50% (Max)</button>
         </div>
-    </div>
-
-    <div class="last-updated">
-        <p>Dashboard auto-refreshes every 5 seconds</p>
-        <p style="margin-top: 5px; color: #555;">Dell R720 XD Fan Control System v1.0</p>
     </div>
 </div>
 
 <script>
-    let autoControlEnabled = true;
+    // Auto-refresh
+    let refreshInterval = null;
 
-    // Initial load
-    document.addEventListener('DOMContentLoaded', function() {
-        updateStatus();
+    document.addEventListener('DOMContentLoaded', () => {
+        updateDashboard();
         startAutoRefresh();
     });
 
-    async function updateStatus() {
+    function startAutoRefresh() {
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(updateDashboard, 5000);
+    }
+
+    async function updateDashboard() {
         try {
             const response = await fetch('/api/status');
             const data = await response.json();
 
-            // Update temperature
-            const highestTemp = data.temperatures.highest;
-            document.getElementById('highestTemp').textContent = highestTemp;
+            // Update header timestamp
+            const time = new Date(data.timestamp);
+            document.getElementById('lastUpdate').textContent = 
+                'Updated: ' + time.toLocaleTimeString();
+
+            // Update stats
+            updateStats(data);
             
-            // Update temperature status badge
-            const tempStatus = document.getElementById('tempStatus');
-            if (highestTemp < 40) {
-                tempStatus.textContent = 'Normal';
-                tempStatus.style.background = 'linear-gradient(90deg, #00ff88, #00d9ff)';
-                tempStatus.style.color = '#1a1a2e';
-            } else if (highestTemp < 50) {
-                tempStatus.textContent = 'Elevated';
-                tempStatus.style.background = 'linear-gradient(90deg, #ffa500, #ff6b6b)';
-                tempStatus.style.color = 'white';
-            } else {
-                tempStatus.textContent = 'High';
-                tempStatus.style.background = 'linear-gradient(90deg, #ff6b6b, #ee5a5a)';
-                tempStatus.style.color = 'white';
-            }
-
-            // Update all temps count
-            document.getElementById('allTempsCount').textContent = data.temperatures.all.length;
-
-            // Update fan speed
-            document.getElementById('avgFanRPM').textContent = data.fans.averageRPM;
-            document.getElementById('fanCount').textContent = data.fans.count;
-
-            // Update control mode
-            const controlMode = data.mode;
-            const modeBadge = document.getElementById('controlModeBadge');
-            const fanModeBadge = document.getElementById('fanModeBadge');
+            // Update sensors
+            updateSensors(data.sensors.temperatures);
             
-            modeBadge.textContent = controlMode;
-            fanModeBadge.textContent = controlMode;
+            // Update GPUs
+            updateGpus(data.sensors.gpus);
+            
+            // Update fans
+            updateFans(data.fans);
 
-            // Update badge styles
-            modeBadge.className = 'mode-badge';
-            fanModeBadge.className = 'mode-badge';
-
-            if (controlMode.includes('Manual')) {
-                modeBadge.classList.add('mode-manual');
-                fanModeBadge.classList.add('mode-manual');
-            } else if (controlMode.includes('Monitoring')) {
-                modeBadge.classList.add('mode-monitoring');
-                fanModeBadge.classList.add('mode-monitoring');
-            } else {
-                modeBadge.classList.add('mode-dynamic');
-                fanModeBadge.classList.add('mode-dynamic');
-            }
-
-            // Update last update time
-            const updateDate = new Date(data.timestamp);
-            document.getElementById('lastUpdate').textContent = 'Last update: ' + updateDate.toLocaleTimeString();
-
-            // Update fan list
-            updateFanList(data.fans.fans, data.fans.averageRPM);
-
-            // Hide error message
-            document.getElementById('errorMessage').classList.remove('visible');
         } catch (error) {
-            console.error('Failed to update status:', error);
-            showError('Failed to connect to fan control service. Make sure the application is running.');
+            console.error('Update failed:', error);
+            showMessage('❌ Connection failed', 'error');
         }
     }
 
-    function updateFanList(fans, averageRpm) {
-        const fanList = document.getElementById('fanList');
-        
-        if (!fans || fans.length === 0) {
-            fanList.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No fan data available</div>';
+    function updateStats(data) {
+        const maxTemp = data.temperatureStatus.highest;
+        document.getElementById('maxTemp').textContent = maxTemp;
+        document.getElementById('avgRpm').textContent = data.fans.averageRPM;
+        document.getElementById('fanCount').textContent = data.fans.count;
+        document.getElementById('controlMode').textContent = data.mode;
+
+        // Temperature status
+        const tempStatus = document.getElementById('tempStatus');
+        if (maxTemp < 40) {
+            tempStatus.textContent = '✓ Normal';
+            tempStatus.style.color = '#00ff88';
+        } else if (maxTemp < 50) {
+            tempStatus.textContent = '⚠ Elevated';
+            tempStatus.style.color = '#ffa500';
+        } else {
+            tempStatus.textContent = '🔥 High';
+            tempStatus.style.color = '#ff6b6b';
+        }
+
+        // Control mode styling
+        const modeEl = document.getElementById('controlMode');
+        if (data.mode.includes('Manual')) {
+            modeEl.style.color = '#ff6b6b';
+            document.getElementById('controlModeDetail').textContent = 'Manual Control';
+        } else {
+            modeEl.style.color = '#00d9ff';
+            document.getElementById('controlModeDetail').textContent = 'Automatic';
+        }
+    }
+
+    function updateSensors(sensors) {
+        const grid = document.getElementById('sensorsGrid');
+        document.getElementById('sensorCount').textContent = sensors.length + ' sensors';
+
+        if (sensors.length === 0) {
+            grid.innerHTML = '<div class="no-data">No sensors detected</div>';
             return;
         }
 
-        fanList.innerHTML = fans.map(fan => {
-            const percentage = (fan.rpm / averageRpm) * 100;
-            const isHigh = percentage > 120;
-            
+        grid.innerHTML = sensors.map(s => {
+            const statusColor = s.temperature < 40 ? '#00ff88' : 
+                               s.temperature < 50 ? '#ffa500' : '#ff6b6b';
             return `
-                <div class="fan-item">
-                    <div style="flex: 1;">
-                        <div class="fan-name">${fan.name}</div>
-                        <div class="progress-bar">
-                            <div class="progress-fill ${isHigh ? 'high' : ''}" style="width: ${Math.min(percentage, 100)}%"></div>
-                        </div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div class="fan-rpm">${fan.rpm} RPM</div>
+                <div class="sensor-card">
+                    <div class="sensor-name">${s.name}</div>
+                    <div class="sensor-value" style="color: ${statusColor}">
+                        ${s.temperature}°C
                     </div>
                 </div>
             `;
         }).join('');
     }
 
-    async function setFanSpeed(speed) {
+    function updateGpus(gpus) {
+        const section = document.getElementById('gpusSection');
+        const grid = document.getElementById('gpusGrid');
+        document.getElementById('gpuCount').textContent = gpus.length + ' GPUs';
+
+        if (gpus.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+        grid.innerHTML = gpus.map(gpu => {
+            const typeIcon = gpu.type === 'NVIDIA' ? '🟢' : 
+                           gpu.type === 'AMD' ? '🔴' : '🔵';
+            return `
+                <div class="gpu-card">
+                    <div class="gpu-header">
+                        <span class="gpu-name">${gpu.name}</span>
+                        <span class="gpu-type">${typeIcon} ${gpu.type}</span>
+                    </div>
+                    <div class="gpu-value">${gpu.temperature}°C</div>
+                    ${gpu.fanSpeed ? `<div class="gpu-fan">💨 ${gpu.fanSpeed}%</div>` : ''}
+                </div>
+            `;
+        }).join('');
+    }
+
+    function updateFans(fansData) {
+        const list = document.getElementById('fanList');
+        document.getElementById('fanCountDetail').textContent = fansData.count + ' fans';
+
+        if (fansData.fans.length === 0) {
+            list.innerHTML = '<div class="no-data">No fan data</div>';
+            return;
+        }
+
+        const avg = fansData.averageRPM;
+        list.innerHTML = fansData.fans.map(fan => {
+            const percent = Math.min((fan.rpm / avg) * 100, 100);
+            return `
+                <div class="fan-item">
+                    <div class="fan-info">
+                        <div class="fan-name">${fan.name}</div>
+                        <div class="fan-bar">
+                            <div class="bar-fill" style="width: ${percent}%"></div>
+                        </div>
+                    </div>
+                    <div class="fan-rpm">${fan.rpm} RPM</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function setSpeed(speed) {
         try {
             const response = await fetch('/api/control/manual', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ speed: speed })
             });
-
             const result = await response.json();
-
+            
             if (result.success) {
-                autoControlEnabled = false;
-                showSuccess(`Fan speed set to ${speed}%`);
-                updateStatus();
+                showMessage(`✓ Fan speed set to ${speed}%`, 'success');
+                updateDashboard();
             } else {
-                showError('Failed to set fan speed: ' + (result.error || 'Unknown error'));
+                showMessage('❌ ' + result.error, 'error');
             }
         } catch (error) {
-            showError('Error setting fan speed: ' + error.message);
+            showMessage('❌ Failed to set speed', 'error');
         }
     }
 
-    async function restoreDynamicControl() {
+    async function restoreDynamic() {
         try {
             const response = await fetch('/api/control/dynamic', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
+                headers: { 'Content-Type': 'application/json' }
             });
-
             const result = await response.json();
-
+            
             if (result.success) {
-                showSuccess('Dynamic control restored');
-                autoControlEnabled = true;
-                updateStatus();
+                showMessage('✓ Dynamic control restored', 'success');
+                updateDashboard();
             } else {
-                showError('Failed to restore dynamic control: ' + (result.error || 'Unknown error'));
+                showMessage('❌ ' + result.error, 'error');
             }
         } catch (error) {
-            showError('Error restoring dynamic control: ' + error.message);
+            showMessage('❌ Failed to restore control', 'error');
         }
     }
 
-    function toggleAutoControl() {
-        autoControlEnabled = !autoControlEnabled;
-        if (autoControlEnabled) {
-            restoreDynamicControl();
-        } else {
-            showSuccess('Automatic control paused. Use speed presets to manually control fans.');
-        }
-    }
-
-    function showError(message) {
-        const errorDiv = document.getElementById('errorMessage');
-        errorDiv.textContent = '❌ ' + message;
-        errorDiv.classList.add('visible');
-        setTimeout(() => errorDiv.classList.remove('visible'), 5000);
-    }
-
-    function showSuccess(message) {
-        const errorDiv = document.getElementById('errorMessage');
-        errorDiv.textContent = '✅ ' + message;
-        errorDiv.classList.add('visible');
-        errorDiv.style.background = 'rgba(0, 255, 136, 0.2)';
-        errorDiv.style.borderColor = '#00ff88';
-        errorDiv.style.color = '#00ff88';
-        setTimeout(() => {
-            errorDiv.classList.remove('visible');
-            errorDiv.style.background = '';
-            errorDiv.style.borderColor = '';
-            errorDiv.style.color = '';
+    function showMessage(text, type) {
+        const msg = document.getElementById('message');
+        msg.textContent = text;
+        msg.className = 'message ' + type;
+        
+        clearTimeout(window.messageTimeout);
+        window.messageTimeout = setTimeout(() => {
+            msg.className = 'message';
         }, 3000);
     }
 </script>
