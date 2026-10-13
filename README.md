@@ -86,6 +86,8 @@ sudo sensors-detect --auto
 
 > **Note:** `ipmitool` requires root privileges for in-band IPMI. Run the application with `sudo` or add the user to the appropriate group.
 
+For Docker deployments, the image includes `lm-sensors`. Run `sudo sensors-detect --auto` on the Docker host before starting the container; sensor detection configures host kernel drivers and should not run during the image build.
+
 ### Configuration
 
 Create `appsettings.json` (git-ignored by default) in the project root:
