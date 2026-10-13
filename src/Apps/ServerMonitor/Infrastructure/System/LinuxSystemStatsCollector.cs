@@ -141,6 +141,10 @@ public class LinuxSystemStatsCollector : ISystemStatsCollector
             }
             catch (Exception ex) { _logger.LogDebug(ex, "cpuinfo read failed"); }
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to collect CPU stats");
@@ -218,6 +222,10 @@ public class LinuxSystemStatsCollector : ISystemStatsCollector
                 ? mem.TotalBytes - mem.AvailableBytes
                 : mem.TotalBytes - mem.FreeBytes - mem.BuffersBytes - mem.CachedBytes;
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to collect memory stats");
@@ -274,17 +282,27 @@ public class LinuxSystemStatsCollector : ISystemStatsCollector
                     BytesSent = iface.BytesSent
                 };
 
-                // Enrich with sysfs metadata
-                await EnrichNetworkInterfaceAsync(iface, ct);
-
                 results.Add(iface);
             }
+
+            // One batched `ip` call for ALL interfaces (instead of one shell
+            // spawn per interface, which stalls collection for ~1s per NIC
+            // and piles up when the 2s service tick overlaps).
+            var allAddresses = await GetAllIpv4AddressesAsync(ct);
+
+            // Sysfs enrichment is plain file reads - run per-interface in parallel.
+            await Task.WhenAll(results.Select(iface =>
+                EnrichNetworkInterfaceAsync(iface, allAddresses, ct)));
 
             // Sort: prefer interfaces that are up + with traffic, then by name
             results = results
                 .OrderByDescending(i => i.IsUp)
                 .ThenByDescending(i => i.BytesReceived + i.BytesSent)
                 .ToList();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -301,7 +319,56 @@ public class LinuxSystemStatsCollector : ISystemStatsCollector
         return false;
     }
 
-    private async Task EnrichNetworkInterfaceAsync(NetworkInterfaceStats iface, CancellationToken ct)
+    /// <summary>
+    /// Single batched IPv4 lookup for all interfaces.
+    /// Output lines look like: "2: eno1    inet 192.168.1.10/24 brd ... scope global eno1"
+    /// </summary>
+    private async Task<Dictionary<string, List<string>>> GetAllIpv4AddressesAsync(CancellationToken ct)
+    {
+        var map = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        try
+        {
+            var ipResult = await _shell.ExecuteAsync(
+                "ip -4 -o addr show 2>/dev/null",
+                timeoutMs: 3000, cancellationToken: ct);
+            if (!ipResult.Success) return map;
+
+            foreach (var line in ipResult.StandardOutput.Split(
+                '\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                // "<idx>: <iface> inet <addr>/<prefix> ..."
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 4) continue;
+                var iface = parts[1];
+                if (!string.Equals(parts[2], "inet", StringComparison.OrdinalIgnoreCase)) continue;
+                var addr = parts[3];
+                var slash = addr.IndexOf('/');
+                if (slash > 0) addr = addr.Substring(0, slash);
+                if (string.IsNullOrEmpty(addr)) continue;
+
+                if (!map.TryGetValue(iface, out var list))
+                {
+                    list = new List<string>();
+                    map[iface] = list;
+                }
+                list.Add(addr);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Batched IPv4 lookup failed");
+        }
+        return map;
+    }
+
+    private async Task EnrichNetworkInterfaceAsync(
+        NetworkInterfaceStats iface,
+        Dictionary<string, List<string>> allAddresses,
+        CancellationToken ct)
     {
         try
         {
@@ -318,18 +385,12 @@ public class LinuxSystemStatsCollector : ISystemStatsCollector
             if (!string.IsNullOrEmpty(mac))
                 iface.MacAddress = mac.Trim();
 
-            // IP addresses via `ip -4 -o addr show <iface>`
-            var ipResult = await _shell.ExecuteAsync(
-                $"ip -4 -o addr show {iface.Name} 2>/dev/null | awk '{{print $4}}' | cut -d/ -f1",
-                timeoutMs: 3000, cancellationToken: ct);
-            if (ipResult.Success)
-            {
-                iface.IpAddresses = ipResult.StandardOutput
-                    .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => x.Trim())
-                    .Where(x => !string.IsNullOrEmpty(x))
-                    .ToList();
-            }
+            if (allAddresses.TryGetValue(iface.Name, out var addrs))
+                iface.IpAddresses = new List<string>(addrs);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -373,6 +434,10 @@ public class LinuxSystemStatsCollector : ISystemStatsCollector
             }
 
             results = results.OrderByDescending(v => v.TotalBytes).ToList();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -465,6 +530,10 @@ public class LinuxSystemStatsCollector : ISystemStatsCollector
             }
 
             results = results.OrderByDescending(d => d.SizeBytes).ToList();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

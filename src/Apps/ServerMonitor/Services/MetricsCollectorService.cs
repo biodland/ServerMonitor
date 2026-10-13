@@ -22,6 +22,13 @@ public class MetricsCollectorService : BackgroundService, IMetricsCollectorServi
     private readonly LinkedList<ServerMetrics> _history = new();
     private ServerMetrics? _latest;
 
+    // Overlap guard: a slow BMC (ipmitool sensor can take 10s+ on a
+    // Dell R720) must never pile up concurrent collections faster than
+    // the 5s tick. 1 = collection in progress.
+    private int _refreshInProgress;
+    private static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan MaxCycleTime = TimeSpan.FromSeconds(25);
+
     public ServerMetrics? Latest
     {
         get { lock (_lock) return _latest; }
@@ -47,16 +54,43 @@ public class MetricsCollectorService : BackgroundService, IMetricsCollectorServi
         _logger.LogInformation("MetricsCollectorService started (interval: {Interval}s)",
             _interval.TotalSeconds);
 
+        // Let the web host and the IPMI connection test settle before the
+        // first heavyweight BMC poll. On-demand API calls still trigger an
+        // immediate RefreshAsync when no snapshot exists yet.
+        try
+        {
+            await Task.Delay(StartupDelay, stoppingToken);
+        }
+        catch (OperationCanceledException) { return; }
+
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
+            if (Interlocked.CompareExchange(ref _refreshInProgress, 1, 0) != 0)
             {
-                await RefreshAsync(stoppingToken);
+                _logger.LogDebug("Previous metrics collection still running; skipping tick");
             }
-            catch (OperationCanceledException) { }
-            catch (Exception ex)
+            else
             {
-                _logger.LogError(ex, "Error collecting metrics");
+                try
+                {
+                    using var cycleCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                    cycleCts.CancelAfter(MaxCycleTime);
+                    await RefreshAsync(cycleCts.Token);
+                }
+                catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+                {
+                    _logger.LogWarning("Metrics collection cycle exceeded {Max}s; skipping tick",
+                        MaxCycleTime.TotalSeconds);
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error collecting metrics");
+                }
+                finally
+                {
+                    Volatile.Write(ref _refreshInProgress, 0);
+                }
             }
 
             try

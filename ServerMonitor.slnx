@@ -3,4 +3,7 @@
   <Folder Name="/src/Apps/">
     <Project Path="src/Apps/ServerMonitor/ServerMonitor.csproj" />
   </Folder>
+  <Folder Name="/src/Backend/">
+    <Project Path="src/Backend/ServerMonitor.Backend/ServerMonitor.Backend.csproj" />
+  </Folder>
 </Solution>

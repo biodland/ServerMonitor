@@ -14,6 +14,14 @@ public class GpuMonitor : IGpuMonitor
     private readonly ILogger<GpuMonitor> _logger;
     private readonly ShellExecutor _shell;
 
+    // `which <tool>` spawns a shell - cache the result so each metrics tick
+    // does not pay for two availability probes.
+    private bool _toolsChecked;
+    private bool _nvidiaAvailable;
+    private bool _rocmAvailable;
+    private DateTime _toolsCheckedAt = DateTime.MinValue;
+    private static readonly TimeSpan ToolCheckTtl = TimeSpan.FromMinutes(5);
+
     public GpuMonitor(ILogger<GpuMonitor> logger, ShellExecutor shell)
     {
         _logger = logger;
@@ -24,16 +32,43 @@ public class GpuMonitor : IGpuMonitor
     {
         var readings = new List<GpuReading>();
 
+        await EnsureToolsCheckedAsync(cancellationToken);
+
         // Try NVIDIA GPUs
-        readings.AddRange(await GetNvidiaGpusAsync(cancellationToken));
-        
+        if (_nvidiaAvailable)
+            readings.AddRange(await GetNvidiaGpusAsync(cancellationToken));
+
         // Try AMD GPUs
-        readings.AddRange(await GetAmdGpusAsync(cancellationToken));
-        
+        if (_rocmAvailable)
+            readings.AddRange(await GetAmdGpusAsync(cancellationToken));
+
         // Try Intel GPUs
         readings.AddRange(await GetIntelGpusAsync(cancellationToken));
 
         return readings;
+    }
+
+    private async Task EnsureToolsCheckedAsync(CancellationToken cancellationToken)
+    {
+        if (_toolsChecked && DateTime.UtcNow - _toolsCheckedAt < ToolCheckTtl)
+            return;
+
+        try
+        {
+            _nvidiaAvailable = await _shell.IsCommandAvailableAsync("nvidia-smi");
+            _rocmAvailable = await _shell.IsCommandAvailableAsync("rocm-smi");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            // Leave previous values on error
+        }
+
+        _toolsChecked = true;
+        _toolsCheckedAt = DateTime.UtcNow;
     }
 
     private async Task<List<GpuReading>> GetNvidiaGpusAsync(CancellationToken cancellationToken)
@@ -42,11 +77,9 @@ public class GpuMonitor : IGpuMonitor
 
         try
         {
-            if (!await _shell.IsCommandAvailableAsync("nvidia-smi"))
-                return readings;
-
             var result = await _shell.ExecuteAsync(
                 "nvidia-smi --query-gpu=name,temperature.gpu,fan.speed,power.draw,utilization.gpu --format=csv,noheader,nounits",
+                timeoutMs: 10000,
                 cancellationToken: cancellationToken);
 
             if (!result.Success) return readings;
@@ -89,11 +122,9 @@ public class GpuMonitor : IGpuMonitor
 
         try
         {
-            if (!await _shell.IsCommandAvailableAsync("rocm-smi"))
-                return readings;
-
             var result = await _shell.ExecuteAsync(
                 "rocm-smi --showtemp --showfan --csv 2>/dev/null",
+                timeoutMs: 10000,
                 cancellationToken: cancellationToken);
 
             if (!result.Success) return readings;
@@ -137,6 +168,7 @@ public class GpuMonitor : IGpuMonitor
             var result = await _shell.ExecuteAsync(
                 "for f in /sys/class/drm/card*/device/hwmon/hwmon*/temp1_input 2>/dev/null; do " +
                 "[ -f \"$f\" ] && echo \"$f:$(cat $f)\"; done",
+                timeoutMs: 5000,
                 cancellationToken: cancellationToken);
 
             if (!result.Success || string.IsNullOrWhiteSpace(result.StandardOutput))

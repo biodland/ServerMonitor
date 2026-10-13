@@ -30,6 +30,11 @@ public class SystemStatsService : BackgroundService, ISystemStatsService
     private List<string>? _includePatterns;
     private List<string>? _excludePatterns;
 
+    // Overlap guard: collection must never pile up faster than the 2s tick
+    // (e.g. when `df` blocks on a stale mount). 1 = collection in progress.
+    private int _refreshInProgress;
+    private static readonly TimeSpan MaxCycleTime = TimeSpan.FromSeconds(10);
+
     public SystemStats? Latest
     {
         get { lock (_lock) return _latest; }
@@ -73,18 +78,36 @@ public class SystemStatsService : BackgroundService, ISystemStatsService
             _interval.TotalSeconds);
 
         // Prime the collector so the first user-visible call has rates
-        try { await RefreshAsync(stoppingToken); } catch { }
+        try { await RefreshAsync(stoppingToken); } catch (OperationCanceledException) { throw; } catch { }
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
+            if (Interlocked.CompareExchange(ref _refreshInProgress, 1, 0) != 0)
             {
-                await RefreshAsync(stoppingToken);
+                _logger.LogDebug("Previous system stats collection still running; skipping tick");
             }
-            catch (OperationCanceledException) { }
-            catch (Exception ex)
+            else
             {
-                _logger.LogError(ex, "Error collecting system stats");
+                try
+                {
+                    using var cycleCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                    cycleCts.CancelAfter(MaxCycleTime);
+                    await RefreshAsync(cycleCts.Token);
+                }
+                catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+                {
+                    _logger.LogWarning("System stats collection exceeded {Max}s; skipping tick",
+                        MaxCycleTime.TotalSeconds);
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error collecting system stats");
+                }
+                finally
+                {
+                    Volatile.Write(ref _refreshInProgress, 0);
+                }
             }
 
             try

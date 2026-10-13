@@ -18,24 +18,33 @@ public class ShellExecutor
     }
 
     /// <summary>
-    /// Execute a shell command and return the output
+    /// Execute a shell command and return the output.
+    /// Cancellation (e.g. application shutdown) is propagated quietly as
+    /// <see cref="OperationCanceledException"/> without error logging.
+    /// Timeouts are reported as a <see cref="ShellResult"/> with
+    /// <see cref="ShellResult.TimedOut"/> set, not as exceptions.
     /// </summary>
     /// <param name="command">The command to execute</param>
     /// <param name="timeoutMs">Timeout in milliseconds (default 30s)</param>
     /// <param name="throwOnError">Whether to throw exception on non-zero exit code</param>
     public async Task<ShellResult> ExecuteAsync(
-        string command, 
+        string command,
         int timeoutMs = 30000,
         bool throwOnError = false,
         CancellationToken cancellationToken = default)
     {
-        var tcs = new TaskCompletionSource<ShellResult>();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var timeoutCts = new CancellationTokenSource(timeoutMs);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, timeoutCts.Token);
+
         var output = new StringBuilder();
         var error = new StringBuilder();
 
-        try
+        using var process = new Process
         {
-            var processStartInfo = new ProcessStartInfo
+            StartInfo = new ProcessStartInfo
             {
                 FileName = "/bin/bash",
                 Arguments = $"-c \"{command.Replace("\"", "\\\"")}\"",
@@ -43,78 +52,76 @@ public class ShellExecutor
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
-            };
+            },
+            EnableRaisingEvents = true
+        };
 
-            var process = new Process
+        process.OutputDataReceived += (sender, e) =>
+        {
+            if (e.Data != null) output.AppendLine(e.Data);
+        };
+
+        process.ErrorDataReceived += (sender, e) =>
+        {
+            if (e.Data != null) error.AppendLine(e.Data);
+        };
+
+        try
+        {
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            try
             {
-                StartInfo = processStartInfo,
-                EnableRaisingEvents = true
-            };
-
-            process.OutputDataReceived += (sender, e) =>
-            {
-                if (e.Data != null) output.AppendLine(e.Data);
-            };
-
-            process.ErrorDataReceived += (sender, e) =>
-            {
-                if (e.Data != null) error.AppendLine(e.Data);
-            };
-
-            process.Exited += (sender, e) =>
-            {
-                var result = new ShellResult
-                {
-                    ExitCode = process.ExitCode,
-                    StandardOutput = output.ToString(),
-                    StandardError = error.ToString(),
-                    Command = command
-                };
-
-                if (throwOnError && process.ExitCode != 0)
-                {
-                    tcs.TrySetException(new InvalidOperationException(
-                        $"Command failed with exit code {process.ExitCode}: {error}"));
-                }
-                else
-                {
-                    tcs.TrySetResult(result);
-                }
-
-                process.Dispose();
-            };
-
-            using (cancellationToken.Register(() =>
-            {
-                try { if (!process.HasExited) process.Kill(); } catch { }
-                tcs.TrySetCanceled(cancellationToken);
-            }))
-            {
-                process.Start();
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
-
-                // Apply timeout
-                var timeoutTask = Task.Delay(timeoutMs, cancellationToken);
-                var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
-
-                if (completedTask == timeoutTask && !process.HasExited)
-                {
-                    try { process.Kill(); } catch { }
-                    _logger.LogWarning("Command timed out after {Timeout}ms: {Command}", 
-                        timeoutMs, command);
-                    return new ShellResult
-                    {
-                        ExitCode = -1,
-                        StandardOutput = output.ToString(),
-                        StandardError = $"Command timed out after {timeoutMs}ms",
-                        Command = command,
-                        TimedOut = true
-                    };
-                }
-
-                return await tcs.Task;
+                await process.WaitForExitAsync(linkedCts.Token);
             }
+            catch (OperationCanceledException)
+            {
+                try
+                {
+                    if (!process.HasExited)
+                        process.Kill(entireProcessTree: true);
+                }
+                catch { }
+
+                // Shutdown / caller cancellation: stay quiet so host
+                // shutdown logs are not flooded with errors.
+                if (cancellationToken.IsCancellationRequested)
+                    throw;
+
+                _logger.LogWarning("Command timed out after {Timeout}ms: {Command}",
+                    timeoutMs, command);
+                return new ShellResult
+                {
+                    ExitCode = -1,
+                    StandardOutput = output.ToString(),
+                    StandardError = $"Command timed out after {timeoutMs}ms",
+                    Command = command,
+                    TimedOut = true
+                };
+            }
+
+            var result = new ShellResult
+            {
+                ExitCode = process.ExitCode,
+                StandardOutput = output.ToString(),
+                StandardError = error.ToString(),
+                Command = command
+            };
+
+            if (throwOnError && process.ExitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Command failed with exit code {process.ExitCode}: {error}");
+            }
+
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutdown path - do not log as an error.
+            throw;
         }
         catch (Exception ex)
         {

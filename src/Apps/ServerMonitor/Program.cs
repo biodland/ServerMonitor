@@ -22,6 +22,11 @@ builder.Logging.SetMinimumLevel(LogLevel.Information);
 // MVC
 builder.Services.AddControllersWithViews();
 
+// Health checks for systemd / Docker / load-balancer probes.
+// /healthz is a cheap liveness signal; /readyz requires collectors to have
+// produced at least one snapshot.
+builder.Services.AddHealthChecks();
+
 // Infrastructure - System utilities
 builder.Services.AddSingleton<ShellExecutor>();
 builder.Services.AddSingleton<LmSensorsParser>();
@@ -158,6 +163,18 @@ app.MapControllerRoute(
     pattern: "{controller=Dashboard}/{action=Index}/{id?}");
 
 app.MapControllers(); // attribute-routed (e.g. ApiController)
+
+app.MapHealthChecks("/healthz");
+app.MapGet("/livez", () => Results.Ok(new { status = "live" }));
+app.MapGet("/readyz", (IMetricsCollectorService metrics, ISystemStatsService stats) =>
+{
+    var metricsReady = metrics.Latest != null;
+    var statsReady = stats.Latest != null;
+    return metricsReady && statsReady
+        ? Results.Ok(new { status = "ready", metricsReady, statsReady })
+        : Results.Json(new { status = "starting", metricsReady, statsReady },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+});
 
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 logger.LogInformation("ServerMonitor starting (provider: {Provider})...", activeProvider.DisplayName);

@@ -1,0 +1,36 @@
+[Unit]
+Description=ServerMonitor - Modular Server Monitoring & Fan Control
+Documentation=https://github.com/anomalyco/opencode
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# NOTE: Type=simple (not notify/forking). The app never sends sd_notify, so
+# Type=notify makes systemd kill a healthy process with "start operation
+# timed out" after DefaultTimeoutStartSec (the crash in the Oct 03 logs).
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/servermonitor
+ExecStart=/opt/servermonitor/servermonitor
+Restart=on-failure
+RestartSec=5
+# Give the BMC-probing startup (max ~30s provider detection) room to finish.
+TimeoutStartSec=60
+# In-flight ipmitool/shell calls are cancelled on SIGINT; 30s is plenty.
+TimeoutStopSec=30
+KillSignal=SIGINT
+# Publish output on this port via appsettings.json
+# (ServerMonitor:Server:Port), default 5000.
+Environment=DOTNET_EnableDiagnostics=0
+Environment=ASPNETCORE_ENVIRONMENT=Production
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=servermonitor
+# Optional: uncomment to allow systemd to watch the liveness probe.
+# (Requires curl on the host.)
+#WatchdogSec=60
+#ExecStartPost=/bin/sh -c 'until curl -sf http://localhost:1080/healthz; do sleep 1; done'
+
+[Install]
+WantedBy=multi-user.target

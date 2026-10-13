@@ -16,6 +16,12 @@ public abstract class ServerProviderBase : IServerProvider, IServerProviderCandi
     protected readonly ILogger Logger;
     private bool _initialized;
 
+    // Server identity barely changes at runtime, but GetServerInfoAsync is
+    // called on every metrics cycle - cache it to avoid a BMC round-trip.
+    private ServerInfo? _cachedInfo;
+    private DateTime _cachedInfoAt = DateTime.MinValue;
+    private static readonly TimeSpan InfoCacheTtl = TimeSpan.FromMinutes(5);
+
     public abstract ServerVendor Vendor { get; }
     public abstract string Model { get; }
     public virtual string DisplayName => $"{Vendor} {Model}";
@@ -43,6 +49,9 @@ public abstract class ServerProviderBase : IServerProvider, IServerProviderCandi
 
     public virtual async Task<ServerInfo> GetServerInfoAsync(CancellationToken cancellationToken = default)
     {
+        if (_cachedInfo != null && DateTime.UtcNow - _cachedInfoAt < InfoCacheTtl)
+            return _cachedInfo;
+
         var info = new ServerInfo
         {
             Vendor = Vendor,
@@ -52,21 +61,27 @@ public abstract class ServerProviderBase : IServerProvider, IServerProviderCandi
         try
         {
             var bmcInfo = await IpmiClient.GetBmcInfoAsync(cancellationToken);
-            
+
             if (bmcInfo.TryGetValue("Manufacturer Name", out var manuf))
                 info.Manufacturer = manuf;
-            
+
             if (bmcInfo.TryGetValue("IPMI Version", out var version))
                 info.IpmiVersion = version;
 
             foreach (var kvp in bmcInfo)
                 info.Properties[kvp.Key] = kvp.Value;
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Could not retrieve full server info");
         }
 
+        _cachedInfo = info;
+        _cachedInfoAt = DateTime.UtcNow;
         return info;
     }
 

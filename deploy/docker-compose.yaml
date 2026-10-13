@@ -1,0 +1,25 @@
+services:
+  servermonitor:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: servermonitor:latest
+    container_name: servermonitor
+    # Host networking so the dashboard/API port and NIC inventory match the host.
+    network_mode: host
+    # In-band IPMI + DMI/SMBIOS access require host devices and sysfs.
+    privileged: true
+    volumes:
+      - /sys:/sys:ro
+      - /proc:/proc:ro
+      - ./appsettings.example.json:/app/appsettings.local.json:ro
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    
