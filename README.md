@@ -129,6 +129,29 @@ dotnet run
 
 Open http://localhost:5000 to access the dashboard. The application will auto-detect your server hardware and select the appropriate provider at startup.
 
+## Release packages
+
+Pushing a version tag such as `v1.2.3` creates a GitHub Release with self-contained Linux archives for `x64` and `ARM64`. Each archive contains the application, `appsettings.example.json`, and the project license; it does not require a .NET runtime on the host.
+
+Install `ipmitool` and `lm-sensors` on the Linux host, then extract the archive, copy `appsettings.example.json` to `appsettings.json`, and configure it before starting the application:
+
+```bash
+tar -xzf ServerMonitor-v1.2.3-linux-x64.tar.gz
+cd ServerMonitor-v1.2.3-linux-x64
+cp appsettings.example.json appsettings.json
+sudo ./ServerMonitor
+```
+
+Use the `linux-arm64` archive on 64-bit ARM Linux systems. In-band IPMI and hardware sensor access require appropriate host permissions.
+
+### Update checks and run reporting
+
+The application checks for a newer stable release at startup by default. It sends the app name and current version to `https://api.odland.im`; it does not send hardware metrics or a user identifier. Set `ServerMonitor:Updates:CheckEnabled` to `false` to disable the check. The API base URL can be overridden with the `ODLAND_API_URL` environment variable.
+
+Run reporting is disabled by default. To opt in, set `ServerMonitor:Updates:ReportUsage` to `true`. This sends one event on each application start containing only the app name, version, and operating system. Event counts therefore represent reported starts, not unique users or installations. Server-side event retention and aggregate usage access depend on the Odland API; this application does not include an analytics dashboard.
+
+Both settings can be configured in `appsettings.json` or through environment variables such as `ServerMonitor__Updates__ReportUsage=true`.
+
 ## REST API
 
 | Method | Path                          | Description                            |

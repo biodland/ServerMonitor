@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+
+          for rid in linux-x64 linux-arm64; do
+            publish_dir="$RUNNER_TEMP/publish-$rid"
+            package_name="ServerMonitor-${GITHUB_REF_NAME}-${rid}"
+            package_dir="$RUNNER_TEMP/$package_name"
+            version="${GITHUB_REF_NAME#v}"
+
+            dotnet publish src/Apps/ServerMonitor/ServerMonitor.csproj \
+              --configuration Release \
+              --runtime "$rid" \
+              --self-contained true \
+              --output "$publish_dir" \
+              -p:UseAppHost=true \
+              -p:Version="$version"
+
+            mkdir -p "$package_dir"
+            cp -a "$publish_dir/." "$package_dir/"
+            cp deploy/appsettings.example.json LICENSE "$package_dir/"
+            tar -C "$RUNNER_TEMP" -czf "artifacts/${package_name}.tar.gz" "$package_name"
+          done
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ServerMonitor ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: artifacts/*.tar.gz

@@ -70,6 +70,7 @@ builder.Services.AddSingleton<ISystemStatsService>(sp => sp.GetRequiredService<S
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemStatsService>());
 
 builder.Services.AddHostedService<FanControlService>();
+builder.Services.AddHostedService<UpdateCheckService>();
 
 // Persistent history (SQLite). The store degrades to in-memory-only when
 // disabled or when the database cannot be opened - never fatal.
