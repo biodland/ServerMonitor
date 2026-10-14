@@ -13,6 +13,12 @@
   <ItemGroup>
     <!-- Microsoft.Extensions.Hosting is included in the Web SDK; explicit refs are not required.
          All other dependencies (Configuration, Logging, DI, MVC) are part of the Web SDK as well. -->
+
+    <!-- SQLite history storage (Phase 5). Core (no auto native-bundle) +
+         explicit e_sqlite3 bundle so offline restore from the local cache works.
+         Batteries_V2.Init() is called once in SqliteHistoryStore. -->
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.10" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
   </ItemGroup>
 
 

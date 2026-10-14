@@ -515,6 +515,11 @@ Each sub-model (`CpuStats`, `MemoryStats`, `NetworkInterfaceStats`, `StorageVolu
 | `ServerMonitor:ForceProvider` | `""` | Force a specific provider by model name |
 | `ServerMonitor:Stats:Network:Include` | `[]` | Network interface whitelist (glob patterns) |
 | `ServerMonitor:Stats:Network:Exclude` | `[veth*, br-*, …]` | Network interface blacklist (glob patterns) |
+| `ServerMonitor:Storage:Enabled` | `true` | Persist snapshots to SQLite (graceful in-memory fallback when off) |
+| `ServerMonitor:Storage:Path` | `data/history.db` | Database file (relative = app base directory) |
+| `ServerMonitor:Storage:RetentionDays` | `30` | Rows older than this are pruned hourly |
+| `ServerMonitor:Storage:WriteIntervalSeconds` | `60` | Snapshot decimation interval |
+| `ServerMonitor:Storage:MaxQueryPoints` | `5000` | Upper bound per history query (downsampled server-side) |
 
 ### Backward Compatibility
 
@@ -566,12 +571,15 @@ All API endpoints are attribute-routed under `/api/` via `ApiController`.
 |--------|------|-------------|
 | `GET` | `/api/status` | Latest `ServerMetrics` snapshot (auto-refreshes if stale) |
 | `GET` | `/api/provider` | Active provider info: vendor, model, capabilities |
-| `GET` | `/api/history` | Rolling hardware metrics history (compact time-series) |
+| `GET` | `/api/history` | Hardware metrics history (SQLite range via `?hours=&limit=&source=`, else rolling buffer) |
+| `GET` | `/api/history/export` | Metrics history as CSV (`?hours=&limit=`) |
+| `GET` | `/api/storage` | Storage diagnostics: backend availability + row counts |
 | `GET` | `/api/test` | Test IPMI/hardware connection |
 | `POST` | `/api/fans/speed/{percentage}` | Set manual fan speed (5–100%) |
 | `POST` | `/api/fans/auto` | Restore automatic fan control |
 | `GET` | `/api/stats` | Latest `SystemStats` snapshot |
-| `GET` | `/api/stats/history` | Rolling system stats history (compact time-series) |
+| `GET` | `/api/stats/history` | System stats history (SQLite range via `?hours=&limit=&source=`, else rolling buffer) |
+| `GET` | `/api/stats/export` | System stats history as CSV (`?hours=&limit=`) |
 
 ### Error Handling
 
@@ -628,11 +636,14 @@ Prints CPU, memory, network, and storage stats to the console. It takes two samp
 - Hysteresis to prevent oscillation
 - Replace fixed-speed `FanControlService` with curve-based logic
 
-### Phase 5: Persisted Metrics History
-- SQLite or InfluxDB storage for historical data
-- Configurable retention policy
-- Historical trend charts in the dashboard
-- Export capabilities (CSV, JSON)
+### Phase 5: Persisted Metrics History (SQLite — implemented)
+- SQLite storage for historical data (`Infrastructure/Storage/SqliteHistoryStore`, WAL mode)
+- `HistoryPersistenceService` decimates live snapshots (default every 60s) so storage I/O never stalls collection
+- Configurable retention policy (hourly prune, incremental vacuum)
+- Queryable trend history: `GET /api/history?hours=&limit=&source=`, `GET /api/stats/history?...`
+- Export capabilities: `GET /api/history/export`, `GET /api/stats/export` (CSV)
+- Storage diagnostics: `GET /api/storage`
+- Remaining: dashboard trend-chart UI for long ranges, JSON export, InfluxDB as optional backend
 
 ### Phase 6: Native IPMI Implementation
 - Research IPMI v2.0 protocol

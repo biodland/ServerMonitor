@@ -2,6 +2,7 @@ using ServerMonitor.Core.Interfaces;
 using ServerMonitor.Infrastructure.Detection;
 using ServerMonitor.Infrastructure.Gpu;
 using ServerMonitor.Infrastructure.Ipmi;
+using ServerMonitor.Infrastructure.Storage;
 using ServerMonitor.Infrastructure.System;
 using ServerMonitor.Providers.Dell;
 using ServerMonitor.Services;
@@ -69,6 +70,11 @@ builder.Services.AddSingleton<ISystemStatsService>(sp => sp.GetRequiredService<S
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemStatsService>());
 
 builder.Services.AddHostedService<FanControlService>();
+
+// Persistent history (SQLite). The store degrades to in-memory-only when
+// disabled or when the database cannot be opened - never fatal.
+builder.Services.AddSingleton<IHistoryStore, SqliteHistoryStore>();
+builder.Services.AddHostedService<HistoryPersistenceService>();
 
 // Kestrel
 builder.WebHost.ConfigureKestrel(options =>

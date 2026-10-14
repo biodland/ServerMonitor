@@ -6,4 +6,7 @@
   <Folder Name="/src/Backend/">
     <Project Path="src/Backend/ServerMonitor.Backend/ServerMonitor.Backend.csproj" />
   </Folder>
+  <Folder Name="/src/Tests/">
+    <Project Path="src/Tests/ServerMonitor.Tests/ServerMonitor.Tests.csproj" />
+  </Folder>
 </Solution>
