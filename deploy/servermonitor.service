@@ -12,7 +12,9 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=/opt/servermonitor
-ExecStart=/opt/servermonitor/servermonitor
+# NOTE: the publish artifact is capital-S ServerMonitor (AssemblyName),
+# and Linux paths are case-sensitive.
+ExecStart=/opt/servermonitor/ServerMonitor
 Restart=on-failure
 RestartSec=5
 # Give the BMC-probing startup (max ~30s provider detection) room to finish.

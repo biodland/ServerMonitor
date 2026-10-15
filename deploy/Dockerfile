@@ -17,4 +17,4 @@ RUN apt-get update \
       && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
 EXPOSE 1080
-ENTRYPOINT ["./servermonitor"]
+ENTRYPOINT ["./ServerMonitor"]
