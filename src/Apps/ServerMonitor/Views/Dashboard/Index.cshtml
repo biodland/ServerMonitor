@@ -92,15 +92,15 @@
     <div class="charts-container" id="chartsContainer">
         <div class="chart-card">
             <div class="chart-title">📊 Temperature</div>
-            <canvas id="tempChart" ></canvas>
+            <div class="chart-wrap"><canvas id="tempChart"></canvas></div>
         </div>
         <div class="chart-card">
             <div class="chart-title">📊 Fans</div>
-            <canvas id="fanChart" ></canvas>
+            <div class="chart-wrap"><canvas id="fanChart"></canvas></div>
         </div>
         <div class="chart-card">
             <div class="chart-title">📊 Power</div>
-            <canvas id="powerChart" ></canvas>
+            <div class="chart-wrap"><canvas id="powerChart"></canvas></div>
         </div>
     </div>
 
@@ -138,95 +138,64 @@
     </div>
 </div>
 
+<script src="/js/site.js"></script>
 <script>
-    // Chart.js with multiple CDN fallbacks
-    function loadChartJS() {
-        const cdns = [
-            'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js',
-            'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.min.js',
-            'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js'
-        ];
-
-        let attempt = 0;
-        function loadScript() {
-            const script = document.createElement('script');
-            script.src = cdns[attempt];
-            script.crossOrigin = 'anonymous';
-            script.onerror = () => {
-                console.warn(`CDN ${cdns[attempt]} failed, trying next...`);
-                attempt++;
-                if (attempt < cdns.length) {
-                    loadScript();
-                } else {
-                    console.error('All Chart.js CDNs failed');
-                    document.getElementById('chartsContainer').style.display = 'none';
-                    initDashboard();
-                }
-            };
-            script.onload = () => {
-                console.log('Chart.js loaded from', cdns[attempt]);
-                initDashboard();
-            };
-            document.head.appendChild(script);
+    // Chart.js loading (local /js/chart.js first, CDN fallback) lives in site.js
+    async function bootCharts() {
+        const hasChart = await Site.loadChartJS();
+        if (!hasChart) {
+            document.getElementById('chartsContainer').style.display = 'none';
+            return;
         }
-        loadScript();
+        initCharts();
+        await seedCharts();
+    }
+
+    // Fill charts from persisted history so they are useful immediately,
+    // not only after minutes of live ticks.
+    async function seedCharts() {
+        try {
+            const resp = await fetch('/api/history?hours=1&limit=60');
+            if (!resp.ok) return;
+            const pts = await resp.json();
+            if (!pts.length) return;
+            const labels = pts.map(p => Site.fmtTime(p.timestamp));
+            Site.setChartData(tempChart, labels, pts.map(p => p.maxTemp));
+            Site.setChartData(fanChart, labels, pts.map(p => p.avgRpm));
+            Site.setChartData(powerChart, labels, pts.map(p => p.powerWatts));
+        } catch (e) {
+            console.warn('Chart seeding failed, live data will fill in', e);
+        }
     }
 
     // Global chart instances
     let tempChart, fanChart, powerChart;
     let refreshInterval;
-    let maxDataPoints = 60;
-    window.Chart = null;
+    const maxDataPoints = 60;
 
-    function initDashboard() {
-        if (typeof Chart !== 'undefined') {
-            initCharts();
-        }
-        updateDashboard();
+    async function initDashboard() {
+        await bootCharts();
+        await updateDashboard();
         startAutoRefresh();
     }
 
     function initCharts() {
-        const chartOptions = {
-            responsive: false,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false }
-            },
-            scales: {
-                x: {
-                    display: false
-                },
-                y: {
-                    display: true,
-                    grid: { color: 'rgba(255,255,255,0.05)' },
-                    ticks: { color: '#666', font: { size: 10 } }
-                }
-            },
-            elements: {
-                point: { radius: 0 },
-                line: { tension: 0.4 }
-            },
-            animation: { duration: 300 }
-        };
-
-        tempChart = new Chart(document.getElementById('tempChart'), {
-            type: 'line',
-            data: { labels: [], datasets: [{ data: [], borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true }] },
-            options: { ...chartOptions, scales: { ...chartOptions.scales, y: { ...chartOptions.scales.y, min: 20, max: 80 } } }
+        tempChart = Site.lineChart(document.getElementById('tempChart'), {
+            color: '#ef4444',
+            tooltip: { label: c => ` ${c.parsed.y.toFixed(1)}°C` }
         });
-
-        fanChart = new Chart(document.getElementById('fanChart'), {
-            type: 'line',
-            data: { labels: [], datasets: [{ data: [], borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: true }] },
-            options: { ...chartOptions, scales: { ...chartOptions.scales, y: { ...chartOptions.scales.y, min: 0, max: 20000 } } }
+        fanChart = Site.lineChart(document.getElementById('fanChart'), {
+            color: '#3b82f6',
+            tooltip: { label: c => ` ${Math.round(c.parsed.y).toLocaleString()} RPM` }
         });
-
-        powerChart = new Chart(document.getElementById('powerChart'), {
-            type: 'line',
-            data: { labels: [], datasets: [{ data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', fill: true }] },
-            options: { ...chartOptions, scales: { ...chartOptions.scales, y: { ...chartOptions.scales.y, min: 0, max: 500 } } }
+        powerChart = Site.lineChart(document.getElementById('powerChart'), {
+            color: '#f59e0b',
+            tooltip: { label: c => ` ${c.parsed.y.toFixed(1)} W` }
         });
+        [tempChart, fanChart, powerChart].forEach(c => { if (c) c.$maxPoints = maxDataPoints; });
+
+
+
     }
 
     function startAutoRefresh() {
@@ -295,10 +264,10 @@
             updateGpus(data.gpus || []);
             updateFans(data.fans || []);
 
-            // Update charts
-            if (typeof Chart !== 'undefined') {
-                updateCharts({ maxTemp, avgRpm, totalWatts });
-            }
+            // Update charts (no-op when Chart.js failed to load)
+            Site.pushChartPoint(tempChart, Site.fmtTime(data.timestamp), maxTemp);
+            Site.pushChartPoint(fanChart, Site.fmtTime(data.timestamp), avgRpm);
+            Site.pushChartPoint(powerChart, Site.fmtTime(data.timestamp), totalWatts);
 
         } catch (error) {
             console.error('Update failed:', error);
@@ -435,21 +404,11 @@
         }).join('');
     }
 
-    function updateCharts(data) {
-        const time = new Date().getTime();
-        const values = [data.maxTemp, data.avgRpm, data.totalWatts];
+    // Live chart updates now go through Site.pushChartPoint (see updateDashboard).
 
-        [tempChart, fanChart, powerChart].forEach((chart, index) => {
-            chart.data.labels.push(time);
-            chart.data.datasets[0].data.push(values[index]);
 
-            if (chart.data.labels.length > maxDataPoints) {
-                chart.data.labels.shift();
-                chart.data.datasets[0].data.shift();
-            }
-            chart.update('none');
-        });
-    }
+
+
 
     async function setSpeed(speed) {
         try {
@@ -496,5 +455,5 @@
     });
 
     // Start loading
-    loadChartJS();
+    initDashboard();
 </script>

@@ -537,8 +537,9 @@ The port can also be set via the old `Server:Port` key as a fallback.
 |-----|-----------|-------------|
 | `/` or `/Dashboard` | `DashboardController` | Hardware monitoring dashboard |
 | `/Stats` | `StatsController` | System stats (CPU/mem/net/disk) |
+| `/History` | `HistoryController` | Long-term trends (SQLite): temp/fans/power + CPU/mem/net/disk, range selector, CSV export links |
 
-Both pages share the `_Layout.cshtml` which provides a top navigation bar with links to both pages.
+Both pages share the `_Layout.cshtml` which provides a top navigation bar with links to all pages. Shared JS lives in `wwwroot/js/site.js` (Chart.js loader with local-first fallback, formatters, responsive chart factory); Chart.js itself is served locally from `wwwroot/js/chart.js` with CDN fallback.
 
 ### Dashboard Features
 

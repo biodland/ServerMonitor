@@ -319,7 +319,6 @@
             margin-bottom: 12px;
             width: 100%;
             overflow: hidden;
-            height: 144px;
         }
 
         .chart-card {
@@ -331,7 +330,6 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            height: 100%;
         }
 
         .chart-title {
@@ -341,17 +339,17 @@
             font-weight: 600;
         }
 
-        .chart-card canvas {
-            width: 100% !important;
-            max-width: 100% !important;
-            height: 100px !important;
+        /* Fixed-height wrapper lets Chart.js (responsive + maintainAspectRatio:false)
+           fill exactly this box - no more stretched 300x150 canvases. */
+        .chart-wrap {
+            position: relative;
+            height: 110px;
         }
-
-        .chart-card canvas {
+        .chart-wrap.tall { height: 220px; }
+        .chart-wrap canvas {
             width: 100% !important;
-            max-width: 100% !important;
-            height: auto !important;
-            min-height: 100px;
+            height: 100% !important;
+            display: block;
         }
 
         /* Fans Grid */
@@ -513,6 +511,66 @@
             background: linear-gradient(135deg, rgba(96,165,250,0.18), rgba(167,139,250,0.18));
             border: 1px solid rgba(96,165,250,0.25);
         }
+
+        /* Page toolbar (History page): range selector + actions */
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+        }
+        .seg { display: flex; gap: 4px; flex-wrap: wrap; }
+        .seg button {
+            padding: 6px 12px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: transparent;
+            color: #999;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .seg button:hover { border-color: #6366f1; color: #6366f1; }
+        .seg button.on {
+            border-color: #6366f1;
+            color: #fff;
+            background: rgba(99,102,241,0.2);
+        }
+        .toolbar .spacer { flex: 1; }
+        .link-btn {
+            padding: 6px 12px;
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #aaa;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        .link-btn:hover { border-color: #22c55e; color: #22c55e; }
+        .notice {
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 0.85rem;
+            background: rgba(245,158,11,0.08);
+            border: 1px solid rgba(245,158,11,0.3);
+            color: #fbbf24;
+        }
+        .hist-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        @@media (max-width: 900px) {
+            .hist-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
@@ -522,6 +580,7 @@
     <nav class="topnav">
         <a href="/Dashboard" class="@(currentController == "Dashboard" ? "active" : "")">🌡️ Dashboard</a>
         <a href="/Stats" class="@(currentController == "Stats" ? "active" : "")">📊 System Stats</a>
+        <a href="/History" class="@(currentController == "History" ? "active" : "")">📈 History</a>
     </nav>
     @RenderBody()
 </body>

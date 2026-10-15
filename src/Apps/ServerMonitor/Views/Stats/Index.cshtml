@@ -273,35 +273,12 @@
     </div>
 </div>
 
+<script src="/js/site.js"></script>
 <script>
+    const { fmtBytes, fmtRate, fmtUptime, statusOf } = Site;
     const refreshIntervalMs = 2000;
 
-    // ----- Formatting helpers -----
-    function fmtBytes(n) {
-        if (n == null || isNaN(n)) return '--';
-        const units = ['B','KiB','MiB','GiB','TiB','PiB'];
-        let i = 0;
-        while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-        return (i === 0 ? n.toFixed(0) : n.toFixed(n < 10 ? 2 : 1)) + ' ' + units[i];
-    }
-    function fmtRate(n) {
-        if (n == null || isNaN(n)) return '--';
-        return fmtBytes(n) + '/s';
-    }
-    function fmtUptime(sec) {
-        if (!sec) return '--';
-        const d = Math.floor(sec / 86400);
-        const h = Math.floor((sec % 86400) / 3600);
-        const m = Math.floor((sec % 3600) / 60);
-        if (d > 0) return `${d}d ${h}h ${m}m`;
-        if (h > 0) return `${h}h ${m}m`;
-        return `${m}m`;
-    }
-    function statusOf(pct, warn, bad) {
-        if (pct >= bad) return 'bad';
-        if (pct >= warn) return 'warning';
-        return '';
-    }
+
 
     // ----- Data loader -----
     async function load() {

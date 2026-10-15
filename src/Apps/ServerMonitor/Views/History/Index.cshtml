@@ -1,0 +1,182 @@
+@{
+    ViewData["Title"] = "History";
+    Layout = "_Layout";
+    var storageAvailable = (bool)(ViewBag.StorageAvailable ?? false);
+}
+
+<div class="dashboard">
+    <div class="header">
+        <div class="header-left">
+            <h1>📈 History</h1>
+            <span class="status-badge @(storageAvailable ? "online" : "offline")">
+                <span class="status-dot">●</span> @(storageAvailable ? "Persisted" : "Live only")
+            </span>
+        </div>
+        <div class="update-info">
+            @if (storageAvailable)
+            {
+                <span>@ViewBag.MetricRows hardware · @ViewBag.StatRows system rows stored</span>
+            }
+            else
+            {
+                <span>persistence disabled</span>
+            }
+        </div>
+    </div>
+
+    @if (!storageAvailable)
+    {
+        <div class="notice">
+            History persistence is disabled or unavailable — charts below fall back to the
+            short live buffer. Enable <code>ServerMonitor:Storage</code> to record long-term trends.
+        </div>
+    }
+
+    <div class="toolbar">
+        <div class="seg" id="rangeSeg">
+            <button data-hours="1" class="on">1h</button>
+            <button data-hours="6">6h</button>
+            <button data-hours="24">24h</button>
+            <button data-hours="168">7d</button>
+            <button data-hours="720">30d</button>
+        </div>
+        <div class="spacer"></div>
+        <span class="update-info" id="histStatus">Ready</span>
+        <button class="link-btn" id="refreshBtn" type="button">↻ Refresh</button>
+        <a class="link-btn" id="csvMetrics" href="/api/history/export?hours=1">⬇ Metrics CSV</a>
+        <a class="link-btn" id="csvStats" href="/api/stats/export?hours=1">⬇ Stats CSV</a>
+    </div>
+
+    <div class="hist-grid">
+        <div class="chart-card">
+            <div class="chart-title">🌡️ Max Temperature (°C)</div>
+            <div class="chart-wrap tall"><canvas id="hTemp"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">💨 Avg Fan Speed (RPM)</div>
+            <div class="chart-wrap tall"><canvas id="hFan"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">🔌 Power (W)</div>
+            <div class="chart-wrap tall"><canvas id="hPower"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">🖥️ CPU / Memory (%)</div>
+            <div class="chart-wrap tall"><canvas id="hCpuMem"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">🌐 Network RX / TX (B/s)</div>
+            <div class="chart-wrap tall"><canvas id="hNet"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">💽 Disk Read / Write (B/s)</div>
+            <div class="chart-wrap tall"><canvas id="hDisk"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<script src="/js/site.js"></script>
+<script>
+    let hours = 1;
+    const charts = {};
+    const bytesTip = c => ` ${Site.fmtRate(c.parsed.y)}`;
+
+    async function init() {
+        const hasChart = await Site.loadChartJS();
+        if (!hasChart) {
+            setStatus('Chart.js failed to load');
+            return;
+        }
+        charts.temp = Site.lineChart(document.getElementById('hTemp'), {
+            color: '#ef4444', tooltip: { label: c => ` ${c.parsed.y.toFixed(1)}°C` }
+        });
+        charts.fan = Site.lineChart(document.getElementById('hFan'), {
+            color: '#3b82f6', tooltip: { label: c => ` ${Math.round(c.parsed.y).toLocaleString()} RPM` }
+        });
+        charts.power = Site.lineChart(document.getElementById('hPower'), {
+            color: '#f59e0b', tooltip: { label: c => ` ${c.parsed.y.toFixed(1)} W` }
+        });
+        charts.cpuMem = Site.lineChart(document.getElementById('hCpuMem'), {
+            legend: true,
+            series: [
+                { label: 'CPU %', color: '#a78bfa' },
+                { label: 'Mem %', color: '#22c55e' }
+            ],
+            tooltip: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}%` }
+        });
+        charts.net = Site.lineChart(document.getElementById('hNet'), {
+            legend: true,
+            series: [
+                { label: 'RX', color: '#06b6d4' },
+                { label: 'TX', color: '#fb923c' }
+            ],
+            yFormat: v => Site.fmtBytes(v),
+            tooltip: { label: c => ` ${c.dataset.label}: ${bytesTip(c)}` }
+        });
+        charts.disk = Site.lineChart(document.getElementById('hDisk'), {
+            legend: true,
+            series: [
+                { label: 'Read', color: '#60a5fa' },
+                { label: 'Write', color: '#f472b6' }
+            ],
+            yFormat: v => Site.fmtBytes(v),
+            tooltip: { label: c => ` ${c.dataset.label}: ${bytesTip(c)}` }
+        });
+        await loadRange();
+    }
+
+    async function loadRange() {
+        setStatus('Loading…');
+        const longRange = hours > 24;
+        try {
+            const [mResp, sResp] = await Promise.all([
+                fetch(`/api/history?hours=${hours}&limit=2000`),
+                fetch(`/api/stats/history?hours=${hours}&limit=2000`)
+            ]);
+            if (!mResp.ok || !sResp.ok) throw new Error('HTTP error');
+            const m = await mResp.json();
+            const s = await sResp.json();
+
+            const mLabels = m.map(p => Site.fmtAxis(p.timestamp, longRange));
+            Site.setChartData(charts.temp, mLabels, m.map(p => p.maxTemp));
+            Site.setChartData(charts.fan, mLabels, m.map(p => p.avgRpm));
+            Site.setChartData(charts.power, mLabels, m.map(p => p.powerWatts));
+
+            const sLabels = s.map(p => Site.fmtAxis(p.timestamp, longRange));
+            Site.setChartData(charts.cpuMem, sLabels,
+                s.map(p => p.cpuUsage), s.map(p => p.memUsage));
+            Site.setChartData(charts.net, sLabels,
+                s.map(p => p.netRxTotal), s.map(p => p.netTxTotal));
+            Site.setChartData(charts.disk, sLabels,
+                s.map(p => p.diskReadTotal), s.map(p => p.diskWriteTotal));
+
+            setStatus(`${m.length + s.length} points · last ${labelFor(hours)}`);
+            if (m.length === 0 && s.length === 0) setStatus('No stored history in range yet');
+        } catch (e) {
+            console.error('History load failed', e);
+            setStatus('Load failed');
+        }
+        document.getElementById('csvMetrics').href = `/api/history/export?hours=${hours}`;
+        document.getElementById('csvStats').href = `/api/stats/export?hours=${hours}`;
+    }
+
+    function labelFor(h) {
+        return h < 24 ? `${h}h` : `${h / 24}d`;
+    }
+
+    function setStatus(t) {
+        document.getElementById('histStatus').textContent = t;
+    }
+
+    document.getElementById('rangeSeg').addEventListener('click', e => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        document.querySelectorAll('#rangeSeg button').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+        hours = parseInt(btn.dataset.hours, 10);
+        loadRange();
+    });
+    document.getElementById('refreshBtn').addEventListener('click', loadRange);
+
+    init();
+</script>
